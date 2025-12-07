@@ -3,6 +3,11 @@
 Deterministic, governed memory for AI agents: JSON-first state, patch DSL, summaries-only context, governance (unknown/dirty/depends_on/temporal/contradicts), replay/time-travel, and partial recompute. TypeScript-only; minimal deps.
 
 ## Quick start
+Install:
+```bash
+npm install reason-state
+```
+
 ```bash
 npm install
 npm run dev
@@ -41,11 +46,11 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 
 ## File map
 - `src/engine`: core ReasonState, types, storage, reconciliation, replay.
-- `src/tools`: `grokChat`, `xSearch`, `mockBooking`.
+- `src/tools`: `grokChat` (planner integration). Example tools (`mockBooking`, `xSearch`) live in `examples/` and are not shipped by default.
 - `src/context`: context builder.
 - `src/agent/planAndAct.ts`: default helper (plan+act, fallback).
 - `src/api/facade.ts`: minimal facade (add/update/recompute/rollback).
-- `examples/agents`: dag/simple examples.
+- `examples/agents`: dag/simple examples; example tools.
 - `demo`: DemoApp (rollback/recompute/diff/replay UI).
 
 ## Demo flow

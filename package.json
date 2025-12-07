@@ -1,8 +1,31 @@
 {
   "name": "reason-state",
-  "version": "0.1.0-hack",
+  "version": "0.1.0",
   "type": "module",
-  "private": true,
+  "private": false,
+  "main": "./src/api/facade.ts",
+  "module": "./src/api/facade.ts",
+  "types": "./src/api/facade.ts",
+  "exports": {
+    ".": "./src/api/facade.ts",
+    "./agent/planAndAct": "./src/agent/planAndAct.ts",
+    "./api": "./src/api/facade.ts",
+    "./context": "./src/context/contextBuilder.ts",
+    "./engine": "./src/engine/ReasonState.ts",
+    "./tools/grokChat": "./src/tools/grokChat.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/",
+    "src/agent/",
+    "src/api/",
+    "src/engine/",
+    "src/context/",
+    "src/tools/grokChat.ts",
+    "README.md"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -19,15 +42,16 @@
     "framer-motion": "^10.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
+    "reason-state": "^0.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0",
     "vite": "^5.0.0",
-    "vitest": "^4.0.15",
-    "ts-node": "^10.9.2"
+    "vitest": "^4.0.15"
   }
 }
