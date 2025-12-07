@@ -56,23 +56,50 @@ export function applyReconciliation(state: EchoState): EchoState {
     propagateDirty(state, contradictions);
   }
 
-  // Block nodes whose dependencies are missing or dirty.
+  // Block nodes whose dependencies (depends_on/temporalAfter/temporalBefore) are missing or dirty; unblock when deps are satisfied.
   for (const node of Object.values(state.raw)) {
-    if (node.dependsOn && node.dependsOn.length > 0) {
-      const unmet = node.dependsOn.some((dep) => {
-        const target = state.raw[dep];
-        return !target || target.dirty || target.status === "blocked" || state.unknowns.includes(dep);
+    const deps = collectDeps(node);
+    if (deps.length > 0) {
+      const unmet = deps.some((dep) => {
+        return !depSatisfied(state, node, dep);
       });
       if (unmet) {
         node.status = "blocked";
+        node.dirty = true;
+      } else if (node.status === "blocked" || node.status === "dirty") {
+        node.status = "open";
         node.dirty = true;
       }
     }
   }
 
+  // Resolve contradiction sets by recency (newest wins, others blocked).
+  resolveContradictionsByRecency(state, contradictions);
+
   for (const node of Object.values(state.raw)) {
     if (node.dirty) {
       node.summary = node.summary ?? stringifyDetails(node);
+    }
+  }
+
+  // Clear dirty for nodes that are not blocked and whose deps are satisfied.
+  for (const node of Object.values(state.raw)) {
+    const deps = collectDeps(node);
+    const depsSatisfied = deps.every((dep) => depSatisfied(state, node, dep));
+    if (node.status !== "blocked" && depsSatisfied) {
+      node.dirty = false;
+    }
+  }
+
+  // Final unblock pass after clearing dirties.
+  for (const node of Object.values(state.raw)) {
+    const deps = collectDeps(node);
+    if (node.status === "blocked" && deps.length > 0) {
+      const depsSatisfied = deps.every((dep) => depSatisfied(state, node, dep));
+      if (depsSatisfied) {
+        node.status = "open";
+        node.dirty = false;
+      }
     }
   }
   return state;
@@ -93,7 +120,7 @@ function neighbors(state: EchoState, id: string): string[] {
   const adj = new Set<string>();
   if (node.parentId) adj.add(node.parentId);
   (node.children ?? []).forEach((c) => adj.add(c));
-  (node.dependsOn ?? []).forEach((d) => adj.add(d));
+  collectDeps(node).forEach((d) => adj.add(d));
   (node.contradicts ?? []).forEach((c) => adj.add(c));
   (node.temporalAfter ?? []).forEach((t) => adj.add(t));
   (node.temporalBefore ?? []).forEach((t) => adj.add(t));
@@ -118,5 +145,69 @@ function neighbors(state: EchoState, id: string): string[] {
     });
   }
   return Array.from(adj);
+}
+
+function resolveContradictionsByRecency(state: EchoState, ids: string[]): void {
+  if (ids.length < 2) return;
+  const visited = new Set<string>();
+  for (const id of ids) {
+    if (visited.has(id)) continue;
+    const node = state.raw[id];
+    if (!node) continue;
+    const neighbors = new Set<string>();
+    (node.contradicts ?? []).forEach((c) => neighbors.add(c));
+    Object.values(state.raw)
+      .filter((n) => (n.contradicts ?? []).includes(id))
+      .forEach((n) => neighbors.add(n.id));
+    if (neighbors.size === 0) continue;
+    neighbors.forEach((n) => visited.add(n));
+    visited.add(id);
+
+    const candidates = [id, ...neighbors].filter((n) => state.raw[n]);
+    let winner = candidates[0];
+    for (const cid of candidates.slice(1)) {
+      if (isNewer(state.raw[cid], state.raw[winner])) winner = cid;
+    }
+    candidates.forEach((cid) => {
+      const ref = state.raw[cid];
+      if (!ref) return;
+      if (cid === winner) {
+        ref.status = ref.status ?? "open";
+        ref.dirty = false;
+      } else {
+        ref.status = "blocked";
+        ref.dirty = true;
+      }
+    });
+  }
+}
+
+function isNewer(a?: StateNode, b?: StateNode): boolean {
+  const ta = getTime(a);
+  const tb = getTime(b);
+  if (ta === undefined) return false;
+  if (tb === undefined) return true;
+  return ta > tb;
+}
+
+function getTime(n?: StateNode): number | undefined {
+  const ts = n?.updatedAt ?? n?.createdAt;
+  if (!ts) return undefined;
+  const t = Date.parse(ts);
+  return Number.isNaN(t) ? undefined : t;
+}
+
+function collectDeps(node: StateNode): string[] {
+  return [...(node.dependsOn ?? []), ...(node.temporalAfter ?? []), ...(node.temporalBefore ?? [])];
+}
+
+function depSatisfied(state: EchoState, node: StateNode, dep: string): boolean {
+  const target = state.raw[dep];
+  const isTemporalBefore = (node.temporalBefore ?? []).includes(dep);
+  if (!target) return false;
+  if (isTemporalBefore) {
+    return target.status === "resolved" && !target.dirty && !state.unknowns.includes(dep);
+  }
+  return !target.dirty && target.status !== "blocked" && !state.unknowns.includes(dep);
 }
 

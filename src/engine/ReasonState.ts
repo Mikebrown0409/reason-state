@@ -62,7 +62,8 @@ import type {
   EchoState,
   Patch,
   Checkpoint,
-  ReasonStateOptions
+  ReasonStateOptions,
+  StateNode
 } from "./types.js";
 import { createEmptyState } from "./types.js";
 import { validatePatch } from "./patchSchema.js";
@@ -301,7 +302,7 @@ function normalizePatchIds(patch: Patch, knownRaw: Set<string>, knownSummary: Se
 function setByPath(state: EchoState, path: string, value: unknown): void {
   const segments = path.split("/").filter(Boolean);
   if (segments[0] === "raw" && segments[1]) {
-    state.raw[segments[1]] = value as EchoState["raw"][string];
+    state.raw[segments[1]] = stampTimestamps(value, state.raw[segments[1]]);
   } else if (segments[0] === "summary" && segments[1]) {
     state.summary[segments[1]] = String(value);
   }
@@ -360,4 +361,23 @@ function resyncLists(state: EchoState): void {
     console.assert(healed.raw.f2?.status === "resolved", "contradicted node resolved");
   });
 })();
+
+function stampTimestamps(value: unknown, prior?: StateNode): StateNode {
+  const now = new Date().toISOString();
+  const base: StateNode =
+    (value && typeof value === "object" ? (value as StateNode) : ({} as StateNode)) ?? ({} as StateNode);
+  if (!prior?.createdAt) {
+    base.createdAt = base.createdAt ?? now;
+  } else {
+    base.createdAt = prior.createdAt;
+  }
+  let updated = now;
+  if (base.updatedAt && base.updatedAt !== prior?.updatedAt) {
+    updated = base.updatedAt;
+  } else if (prior?.updatedAt === now) {
+    updated = new Date(Date.now() + 1).toISOString();
+  }
+  base.updatedAt = updated;
+  return base;
+}
 
