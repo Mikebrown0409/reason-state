@@ -45,6 +45,7 @@ retractAssumption("u1", engine.snapshot);
 - Copy `.env.example` to `.env` and fill:
   - `VITE_X_BEARER_TOKEN`, `VITE_GROK_API_KEY` (required)
   - `VITE_X_BASE_URL`, `VITE_GROK_BASE_URL` (optional)
+  - No fallbacks: missing keys will raise errors (we do not silently skip).
 
 ## What's verified (demo)
 - Live X search populates assumptions.
@@ -53,6 +54,8 @@ retractAssumption("u1", engine.snapshot);
 - Slider/time machine driven by live agent patches (X→Grok→booking).
 - Determinism check button replays patches and compares state.
 - Grok 4.1 used for plan/patching via deterministic, summaries-only context builder; patch DSL validated (no deletes).
+ - Missing X/Grok keys will fail loud; set env before running demo.
+- Log format: NDJSON, one patch per line. Provide `logPath` to `ReasonState` to append; use `replayFromLog` to rebuild.
 
 ## Deploy (draft)
 - Set env: `GROK_API_KEY` (or `X_BEARER_TOKEN`) for X search.

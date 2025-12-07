@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "test": "tsx tests/determinism.test.ts",
+    "test:agent": "tsx tests/agent.smoke.ts",
+    "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "@types/react": "^18.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vitest": "^4.0.15"
   }
 }

@@ -15,7 +15,7 @@ export type AssumptionStatus =
   | "resolved";
 
 export interface Patch {
-  op: "add" | "replace" | "remove";
+  op: "add" | "replace";
   path: string;
   value?: unknown;
   reason?: string;
@@ -67,6 +67,8 @@ export interface Checkpoint {
 
 export interface ReasonStateOptions {
   dbPath?: string;
+  logPath?: string;
+  checkpointInterval?: number;
   grok?: unknown;
 }
 
@@ -121,12 +123,8 @@ export function createEmptyState(): EchoState {
     "assumption can be retracted"
   );
 
-  // Patch typing: optional value only when not remove.
+  // Patch typing: add/replace carry value.
   const addPatch: Patch = { op: "add", path: "/raw/u1", value: unknownNode };
-  const removePatch: Patch = { op: "remove", path: "/raw/u1" };
-  console.assert(
-    addPatch.value !== undefined && removePatch.value === undefined,
-    "remove op omits value; add/replace carry value"
-  );
+  console.assert(addPatch.value !== undefined, "add/replace carry value");
 })();
 

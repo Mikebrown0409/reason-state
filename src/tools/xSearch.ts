@@ -30,8 +30,7 @@ function getBearer(): string | undefined {
 export async function xSearch(query: string): Promise<Patch[]> {
   const token = getBearer();
   if (!token) {
-    console.warn("X search skipped: no X_BEARER_TOKEN / GROK_API_KEY / VITE_ env set");
-    return [];
+    throw new Error("X search requires X_BEARER_TOKEN / VITE_X_BEARER_TOKEN (no fallback allowed)");
   }
   const base = typeof window !== "undefined" ? "/x-api" : "https://api.twitter.com";
   const url = new URL(`${base}/2/tweets/search/recent`, typeof window !== "undefined" ? window.location.origin : undefined);

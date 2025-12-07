@@ -17,8 +17,9 @@
       "@engine/*": ["src/engine/*"],
       "@tools/*": ["src/tools/*"],
       "@ui/*": ["src/ui/*"]
-    }
+    },
+    "types": ["vitest", "node"]
   },
-  "include": ["src", "demo"]
+  "include": ["src", "demo", "tests"]
 }
 

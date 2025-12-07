@@ -3,7 +3,7 @@ import { Timeline } from "../src/ui/Timeline.js";
 import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState } from "../src/engine/types.js";
-import { runDemoAgent } from "../src/agent/demoAgent.js";
+import { runXAgent as runDemoAgent } from "../examples/agents/xAgent.js";
 import confetti from "canvas-confetti";
 
 type HistoryEntry = { state: EchoState; label: string; idx: number };
@@ -27,6 +27,7 @@ export function DemoApp() {
   const prev = history[idx - 1];
   const changed = diffNodes(prev?.state, current?.state);
   const [plan, setPlan] = useState<string>("");
+  const [planMeta, setPlanMeta] = useState<{ attempts?: number; lastError?: string }>();
   const [events, setEvents] = useState<string[]>([]);
   const [query, setQuery] = useState("Tokyo");
   const [budget, setBudget] = useState(4000);
@@ -45,6 +46,7 @@ export function DemoApp() {
       setHistory(withIdx);
       setIdx(withIdx.length - 1);
       setPlan(res.plan ?? "");
+      setPlanMeta(res.planMeta);
       setEvents(res.events);
       setTimeline((prev) => [...prev, `Turn ${turn}: ${res.events.join(" | ")}`]);
     });
@@ -126,6 +128,12 @@ export function DemoApp() {
             <div>Self-heal events: {events.filter((e) => e.toLowerCase().includes("self-heal")).length}</div>
             <div>Unknowns: {unknowns.length}</div>
             <div>Dirty nodes: {dirtyNodes.length}</div>
+            {planMeta && (
+              <div>
+                Grok validation: attempts {planMeta.attempts ?? "?"}
+                {planMeta.lastError ? ` (last error: ${planMeta.lastError})` : ""}
+              </div>
+            )}
           </div>
         </div>
         <div style={{ flex: 1, background: "#f8fafc", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0" }}>

@@ -1,8 +1,11 @@
-import type { Checkpoint, EchoState } from "./types.js";
+import fs from "fs";
+import path from "path";
+import type { Checkpoint, EchoState, Patch } from "./types.js";
 
 const DEFAULT_DB = ":memory:";
 const isBrowser = typeof window !== "undefined";
 const memStore = new Map<string, Checkpoint>();
+const memLog: Patch[] = [];
 
 export async function saveCheckpoint(
   state: EchoState,
@@ -48,6 +51,30 @@ export async function loadCheckpoint(
   if (!row) throw new Error(`Checkpoint not found: ${id}`);
   const state: EchoState = JSON.parse(row.payload);
   return { id, state, createdAt: row.createdAt, turnId: row.turnId ?? undefined };
+}
+
+export function appendToLogSync(patches: Patch[], logPath?: string): void {
+  if (!patches.length) return;
+  if (isBrowser || !logPath) {
+    memLog.push(...patches);
+    return;
+  }
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const payload = patches.map((p) => JSON.stringify(p)).join("\n") + "\n";
+  fs.appendFileSync(logPath, payload, "utf8");
+}
+
+export async function readLog(logPath?: string): Promise<Patch[]> {
+  if (isBrowser || !logPath) return [...memLog];
+  try {
+    const data = await fs.promises.readFile(logPath, "utf8");
+    return data
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Patch);
+  } catch {
+    return [];
+  }
 }
 
 async function open(dbPath: string) {
