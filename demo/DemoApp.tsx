@@ -23,6 +23,8 @@ export function DemoApp() {
   const [budget, setBudget] = useState(4000);
   const [replayResult, setReplayResult] = useState<string>("");
   const [factInput, setFactInput] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [timeline, setTimeline] = useState<string[]>([]);
   const [reusedCount, setReusedCount] = useState(0);
   const [regeneratedCount, setRegeneratedCount] = useState(0);
@@ -33,21 +35,13 @@ export function DemoApp() {
   const [resolvedBookings, setResolvedBookings] = useState(0);
   const [showPatchLog, setShowPatchLog] = useState(false);
   const [showModelContext, setShowModelContext] = useState(false);
-  const scriptedSteps: Array<{ label: string; query: string; budget: number; startDate: string; endDate: string }> = [
-    { label: "Turn 1: Tokyo (clash)", query: "Tokyo", budget: 4000, startDate: "2025-12-20", endDate: "2025-12-23" },
-    { label: "Turn 2: Adjust", query: "Tokyo", budget: 4000, startDate: "2025-12-20", endDate: "2025-12-23" },
-    { label: "Turn 3: Amsterdam (resolved)", query: "Amsterdam", budget: 4500, startDate: "2026-02-10", endDate: "2026-02-15" }
-  ];
 
-  const runLive = (opts?: { scriptedIndex?: number }) => {
-    const scripted = opts?.scriptedIndex !== undefined ? scriptedSteps[opts.scriptedIndex] : undefined;
-    const q = scripted?.query ?? query;
-    const b = scripted?.budget ?? budget;
+  const runLive = () => {
+    const q = query;
+    const b = budget;
     const injected = factInput ? [{ summary: factInput }] : [];
     runDemoAgent(q, b, injected, {
-      bookingDates: scripted
-        ? { startDate: scripted.startDate, endDate: scripted.endDate }
-        : undefined
+      bookingDates: startDate && endDate ? { startDate, endDate } : undefined
     }).then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
@@ -155,13 +149,27 @@ export function DemoApp() {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Query" style={{ padding: 6, flex: 1, minWidth: 160 }} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Destination / goal" style={{ padding: 6, flex: 1, minWidth: 160 }} />
           <input
             type="number"
             value={budget}
             onChange={(e) => setBudget(Number(e.target.value))}
             placeholder="Budget"
             style={{ padding: 6, width: 120 }}
+          />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            placeholder="Start"
+            style={{ padding: 6, width: 150 }}
+          />
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            placeholder="End"
+            style={{ padding: 6, width: 150 }}
           />
           <input
             value={factInput}
@@ -171,12 +179,6 @@ export function DemoApp() {
           />
           <button onClick={() => runLive()} style={{ padding: "6px 12px" }}>
             Run
-          </button>
-          <button onClick={() => runLive({ scriptedIndex: 0 })} style={{ padding: "6px 12px" }}>
-            Script: Clash
-          </button>
-          <button onClick={() => runLive({ scriptedIndex: 2 })} style={{ padding: "6px 12px" }}>
-            Script: Resolve
           </button>
           <button
             onClick={() => {
