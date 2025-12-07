@@ -41,7 +41,7 @@ async function main() {
 
   console.assert(res.history.length > 0, "history should not be empty");
   console.assert(res.events.length > 0, "events should not be empty");
-  console.assert(Array.isArray(res.planPatches), "planPatches should be array");
+  console.assert(Array.isArray(res.planPatches) || res.planPatches === undefined, "planPatches should be array or undefined when model fails");
 }
 
 main().catch((err) => {

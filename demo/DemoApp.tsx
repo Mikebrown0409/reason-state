@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Timeline } from "../src/ui/Timeline.js";
 import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
-import type { EchoState } from "../src/engine/types.js";
+import type { EchoState, Patch } from "../src/engine/types.js";
 import { runXAgent as runDemoAgent } from "../examples/agents/xAgent.js";
 import confetti from "canvas-confetti";
 
@@ -27,7 +27,10 @@ export function DemoApp() {
   const prev = history[idx - 1];
   const changed = diffNodes(prev?.state, current?.state);
   const [plan, setPlan] = useState<string>("");
-  const [planMeta, setPlanMeta] = useState<{ attempts?: number; lastError?: string }>();
+  const [planMeta, setPlanMeta] = useState<{ attempts?: number; lastError?: string; raw?: string }>();
+  const [planMetaHistory, setPlanMetaHistory] = useState<Array<{ attempts?: number; lastError?: string; raw?: string; label?: string }>>(
+    []
+  );
   const [events, setEvents] = useState<string[]>([]);
   const [query, setQuery] = useState("Tokyo");
   const [budget, setBudget] = useState(4000);
@@ -35,6 +38,11 @@ export function DemoApp() {
   const [turn, setTurn] = useState(1);
   const [factInput, setFactInput] = useState("");
   const [timeline, setTimeline] = useState<string[]>([]);
+  const [reusedCount, setReusedCount] = useState(0);
+  const [regeneratedCount, setRegeneratedCount] = useState(0);
+  const [patchLog, setPatchLog] = useState<Patch[]>([]);
+  const [blockedBookings, setBlockedBookings] = useState(0);
+  const [resolvedBookings, setResolvedBookings] = useState(0);
 
   useEffect(() => {
     runLive();
@@ -47,8 +55,29 @@ export function DemoApp() {
       setIdx(withIdx.length - 1);
       setPlan(res.plan ?? "");
       setPlanMeta(res.planMeta);
+      setPlanMetaHistory(res.planMetaHistory ?? []);
       setEvents(res.events);
       setTimeline((prev) => [...prev, `Turn ${turn}: ${res.events.join(" | ")}`]);
+      const allPatches = res.history.flatMap((h) => h.state.history ?? []);
+      setPatchLog(allPatches);
+      const bookings = Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter((n) => n.type === "action");
+      setBlockedBookings(bookings.filter((b) => b.status === "blocked").length);
+      setResolvedBookings(bookings.filter((b) => b.status === "resolved").length);
+      if (res.history.length >= 2) {
+        const last = res.history[res.history.length - 1].state;
+        const prevState = res.history[res.history.length - 2].state;
+        const lastIds = new Set(Object.keys(last.raw));
+        const prevIds = new Set(Object.keys(prevState.raw));
+        let reused = 0;
+        lastIds.forEach((id) => {
+          if (prevIds.has(id) && JSON.stringify(last.raw[id]) === JSON.stringify(prevState.raw[id])) reused++;
+        });
+        setReusedCount(reused);
+        setRegeneratedCount(lastIds.size - reused);
+      } else {
+        setReusedCount(0);
+        setRegeneratedCount(0);
+      }
     });
   };
 
@@ -84,6 +113,9 @@ export function DemoApp() {
   };
 
   const recentPatches = (current?.state.history ?? []).slice(-8).reverse();
+  const contextSnapshot = Object.entries(current?.state.summary ?? {})
+    .map(([id, summary]) => `- ${id}: ${summary}`)
+    .join("\n");
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", fontFamily: "Inter, sans-serif", padding: 16 }}>
@@ -128,6 +160,9 @@ export function DemoApp() {
             <div>Self-heal events: {events.filter((e) => e.toLowerCase().includes("self-heal")).length}</div>
             <div>Unknowns: {unknowns.length}</div>
             <div>Dirty nodes: {dirtyNodes.length}</div>
+            <div>Reused nodes: {reusedCount}</div>
+            <div>Regenerated nodes: {regeneratedCount}</div>
+            <div>Bookings: {resolvedBookings} resolved / {blockedBookings} blocked</div>
             {planMeta && (
               <div>
                 Grok validation: attempts {planMeta.attempts ?? "?"}
@@ -184,6 +219,25 @@ export function DemoApp() {
       {plan && (
         <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
           <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
+          {planMetaHistory.length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 12, color: "#334155" }}>
+              <div style={{ fontWeight: 600 }}>Validation/backoff</div>
+              <ul>
+                {planMetaHistory.map((m, i) => (
+                  <li key={i}>
+                    {m.label ?? `Attempt ${i + 1}`}: attempts={m.attempts ?? "?"}
+                    {m.lastError ? ` lastError=${m.lastError}` : ""}{" "}
+                    {m.raw ? (
+                      <details>
+                        <summary>raw</summary>
+                        <pre style={{ whiteSpace: "pre-wrap" }}>{m.raw}</pre>
+                      </details>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </AssumptionCard>
       )}
 
@@ -236,6 +290,30 @@ export function DemoApp() {
             ))}
           </ul>
         )}
+      </AssumptionCard>
+
+      <AssumptionCard title="Patch log (all)" status="valid" subtitle="Append-only patches with source/timestamps">
+        {patchLog.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
+        ) : (
+          <ul style={{ fontSize: 12, color: "#334155", maxHeight: 200, overflow: "auto" }}>
+            {[...patchLog].reverse().map((p, i) => {
+              const val = (p as any).value as any;
+              return (
+                <li key={`${p.path}-${i}`}>
+                  {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
+                  {val?.status ? `[status=${val.status}]` : ""}{" "}
+                  {val?.createdAt ? `[created=${val.createdAt}]` : ""} {val?.updatedAt ? `[updated=${val.updatedAt}]` : ""}{" "}
+                  {val?.sourceType ? `[src: ${val.sourceType}${val.sourceId ? `/${val.sourceId}` : ""}]` : ""}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </AssumptionCard>
+
+      <AssumptionCard title="What the model saw" status="valid" subtitle="Summaries-only context snapshot">
+        <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", color: "#0f172a" }}>{contextSnapshot || "No summaries"}</pre>
       </AssumptionCard>
 
       <AssumptionCard title="Diff (previous → current)" status="valid" subtitle="Changed nodes on last step">
