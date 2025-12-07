@@ -2,35 +2,47 @@
 alwaysApply: true
 ---
 
-## 6. NO MOCKS, NO WEAK TESTS, NO FAKE AGENTS — BATTLE-TESTED ONLY
+# Reason-State Pivot Rules (JSON-first governed graph)
 
-- **Zero Mock Tools in Final Demo**: All tools and data sources must be **real or real-equivalent**.  
-  - `xSearch.ts` must use the **actual X API** (`@xai/grok-sdk` or official X endpoints).  
-  - If API key missing for demo, fall back to **live public X posts** via keyword/semantic search with `start_time:2025-12-06` (real data, no hardcoded JSON).  
-  - Booking tool can be fake **only if it returns realistic structured data** and is blocked by `canExecute()` when unknowns exist — never a no-op.
+## Core principles
+- JSON-first: no graph DB required. State is structured JSON with nodes, edges, append-only patch log, periodic checkpoints, deterministic replay.
+- Details vs summaries: details are authoritative (never LLM-mutated); summaries are LLM-facing and must be faithful.
+- No deletes: patches cannot delete nodes. Changes are append-only mutations via validated patch DSL.
+- Governance first: unknown/dirty/invalid assumptions block actions; contradictions trigger self-heal; lineage is required (`sourceType/sourceId`).
 
-- **LangGraph Agent Must Be Real and Battle-Tested**:  
-  - The demo agent (research → plan → book) must be a **fully compiled LangGraph StateGraph** with real nodes:  
-    - `researchX`: Calls real X API → creates real assumptions with `sourceId: post_id`.  
-    - `planWithGrok`: Calls **Grok-4.1** (not mock) → outputs real patches/summaries.  
-    - `bookTravel`: Calls a real-ish tool (e.g., mock Stripe + real calendar check) and is **blocked** if unknowns or dirty nodes exist.  
-  - The graph must survive full end-to-end runs: Tokyo plan → Amsterdam retract → replay → new plan with **different X posts pulled live**.
+## Data model (minimum)
+- Node fields: `id`, `type` (fact/assumption/unknown/decision/action/planning/external), `summary`, `details`, `status` (open/resolved/blocked/assumed/missing), `parentId`, `children[]`, `sourceType/sourceId`, `assumptionStatus`, timestamps, optional metadata (tool args, expiration).
+- Edges: stored as adjacency on nodes; supported relations include `depends_on`, `contradicts`, `temporal_before/after`, `subgoal_of`, `inferred_from`.
+- Logs & checkpoints: maintain append-only patch log; checkpoint every N patches/turns; support deterministic rebuild/replay.
 
-- **No Hardcoded Plans or Fake Outputs**:  
-  - Forbidden: `if (query.includes("Tokyo")) return fakePlan`.  
-  - Allowed: Seeded prompts for consistency (e.g., same system prompt), but Grok response must be real.  
-  - Timeline must show **real X post previews** (text + media) from actual search results.
+## Patch DSL (validated, Zod)
+Allowed ops: `updateSummary`, `setStatus`, `addChildNode`, `linkNodes`, `createUnknownNode`, `resolveUnknown`, `promoteToParent`, `mergeNodes`. No deletes. IDs must exist (except for new nodes). Summaries must not invent data absent in details.
 
-- **Testing Standard**:  
-  - Every core function (`applyPatches`, `retractAssumption`, `selfHealAndReplay`) must have **real integration tests** using a live Grok call and real X data (even if rate-limited to 2-3 calls).  
-  - Include a `DemoApp.test.ts` that runs the full LangGraph agent twice:  
-    1. Tokyo plan  
-    2. Retract destination → Amsterdam replay  
-    → Assert: Different hotels, same flights (if budget unchanged), token savings >80%, no full re-roll.
+## Reconciliation & dirty propagation
+- Dirty triggers: detail update, parent change, structural link/merge, contradiction.
+- Propagation: node → parent → depends_on/children as needed.
+- Self-heal: contradictions mark involved nodes dirty and resolve via patches; re-run reconciliation.
 
-- **If You Can’t Make It Real, You Fail the Rule**:  
-  - If real X/Grok calls are blocked (quota/API key), the assistant must say:  
-    > “Cannot generate — violates Rule #6 (no mocks). Provide API key or use live public X data fallback.”  
-  - No exceptions. Weak demo = dead in Jarvis.
+## Context builder (must use)
+- Deterministic, token-budgeted, summaries-only. Priority buckets: goals/constraints → blockers/unknowns → active plans → top-K facts/assumptions by relevance/recency → minimal timeline. Stable ordering for replay.
 
-This rule ensures reason-state is not another toy wrapper — it’s the **real, battle-tested OS layer** that survives contact with actual Grok-4.1 and live X data. Judges will smell fake in 5 seconds.
+## Tool realism (Rule #6 aligned)
+- `xSearch`: real X API; if no key, use live public X search with `start_time>=2025-12-06` (no canned data). Must emit assumptions with `sourceId=post_id`, `sourceType=x-post`, include text/media where available.
+- `grokChat`: Grok 4.1 only; no mock; `grokPlanPatch` must carry lineage.
+- Booking: real-ish (e.g., Stripe test + calendar clash). Must block if `unknowns`/`dirty` present (`canExecute` gate). No no-op mocks.
+
+## Agent/orchestrator expectations
+- JSON-native DAG (or LangGraph/Temporal-lite) with nodes: gate → researchX → planWithGrok → bookTravel → selfHeal → replay. Checkpoints per turn. Replay reuses valid artifacts; regenerates dirty dependents.
+
+## Demo acceptance (Jarvis track)
+- Scenario: Tokyo → retract destination → Amsterdam replay. Assert: same flights if budget unchanged, different hotels, >80% token savings, no full reroll.
+- UI proof: lineage-rich X post previews (text/media), plan, booking artifacts; governance panel showing unknown/dirty blockers; determinism check visible.
+
+## Testing requirements
+- Vitest (or equivalent) integration tests with live calls (rate-limited).
+- Tests for: deterministic rebuild from log+checkpoint, context builder token budgeting, replay scenario above, governance gating (unknown/dirty/invalid assumptions), contradiction self-heal.
+
+## Failure policy
+- If real X/Grok unavailable: fail loud (“Cannot generate — violates Rule #6 (no mocks). Provide API key or use live public X data fallback.”).
+- Repeated invalid patches: backoff and block affected nodes until details change.
+

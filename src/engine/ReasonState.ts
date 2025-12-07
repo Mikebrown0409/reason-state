@@ -6,6 +6,8 @@ import type {
   Checkpoint,
   ReasonStateOptions
 } from "./types.js";
+import { createEmptyState } from "./types.js";
+import { validatePatch } from "./patchSchema.js";
 
 export class ReasonState {
   private state: EchoState;
@@ -56,6 +58,18 @@ export class ReasonState {
   async restore(id: string): Promise<EchoState> {
     const cp = await loadCheckpoint(id, this.options.dbPath);
     this.state = cp.state;
+    return this.state;
+  }
+
+  /**
+   * Replay the current patch history from an optional checkpoint id.
+   * If no checkpoint provided or found, replays from an empty state.
+   */
+  replay(fromCheckpoint?: string): EchoState {
+    const base =
+      (fromCheckpoint && this.state.checkpoints?.[fromCheckpoint]?.state) || createEmptyState();
+    const rebuilt = replayHistory(this.state.history ?? [], base);
+    this.state = rebuilt;
     return this.state;
   }
 }
@@ -128,6 +142,11 @@ export async function selfHealAndReplay(
 
 export { canExecute };
 
+export function replayHistory(history: Patch[], baseState?: EchoState): EchoState {
+  const base = cloneState(baseState ?? createEmptyState());
+  return applyPatches(history, base);
+}
+
 function cloneState(state: EchoState): EchoState {
   return JSON.parse(JSON.stringify(state)) as EchoState;
 }
@@ -161,18 +180,6 @@ function resyncLists(state: EchoState): void {
   state.assumptions = Object.values(state.raw)
     .filter((n) => n.type === "assumption" && n.assumptionStatus !== "retracted")
     .map((n) => n.id);
-}
-
-function validatePatch(patch: Patch): void {
-  if (!["add", "replace", "remove"].includes(patch.op)) {
-    throw new Error(`invalid op: ${patch.op}`);
-  }
-  if (!patch.path.startsWith("/raw") && !patch.path.startsWith("/summary")) {
-    throw new Error(`invalid path: ${patch.path}`);
-  }
-  if (patch.op !== "remove" && patch.value === undefined) {
-    throw new Error("value required for add/replace");
-  }
 }
 
 // Inline assertions to ensure determinism and governance rules hold.

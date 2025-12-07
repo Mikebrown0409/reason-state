@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Timeline } from "../src/ui/Timeline.js";
 import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
-import type { EchoState, Patch } from "../src/engine/types.js";
+import type { EchoState } from "../src/engine/types.js";
 import { runDemoAgent } from "../src/agent/demoAgent.js";
 import confetti from "canvas-confetti";
 
@@ -31,18 +31,22 @@ export function DemoApp() {
   const [query, setQuery] = useState("Tokyo");
   const [budget, setBudget] = useState(4000);
   const [replayResult, setReplayResult] = useState<string>("");
+  const [turn, setTurn] = useState(1);
+  const [factInput, setFactInput] = useState("");
+  const [timeline, setTimeline] = useState<string[]>([]);
 
   useEffect(() => {
     runLive();
   }, []);
 
   const runLive = () => {
-    runDemoAgent(query, budget).then((res) => {
+    runDemoAgent(query, budget, factInput ? [{ summary: factInput }] : []).then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
       setIdx(withIdx.length - 1);
       setPlan(res.plan ?? "");
       setEvents(res.events);
+      setTimeline((prev) => [...prev, `Turn ${turn}: ${res.events.join(" | ")}`]);
     });
   };
 
@@ -92,8 +96,23 @@ export function DemoApp() {
           placeholder="Budget"
           style={{ padding: 6, width: 120 }}
         />
+        <input
+          value={factInput}
+          onChange={(e) => setFactInput(e.target.value)}
+          placeholder="Optional new fact / assumption"
+          style={{ padding: 6, flex: 1 }}
+        />
         <button onClick={runLive} style={{ padding: "6px 12px" }}>
           Run agent
+        </button>
+        <button
+          onClick={() => {
+            setTurn((t) => t + 1);
+            runLive();
+          }}
+          style={{ padding: "6px 12px" }}
+        >
+          New turn
         </button>
       </div>
 
@@ -144,6 +163,15 @@ export function DemoApp() {
       </div>
 
       <Timeline items={timelineLabels} />
+      {timeline.length > 0 && (
+        <AssumptionCard title="Turn log" status="valid" subtitle="Events per turn">
+          <ul style={{ fontSize: 12, color: "#334155" }}>
+            {timeline.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </AssumptionCard>
+      )}
 
       {plan && (
         <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">

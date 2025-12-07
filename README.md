@@ -52,11 +52,25 @@ retractAssumption("u1", engine.snapshot);
 - Mock booking gated by unknowns/dirty.
 - Slider/time machine driven by live agent patches (X→Grok→booking).
 - Determinism check button replays patches and compares state.
+- Grok 4.1 used for plan/patching via deterministic, summaries-only context builder; patch DSL validated (no deletes).
 
 ## Deploy (draft)
 - Set env: `GROK_API_KEY` (or `X_BEARER_TOKEN`) for X search.
 - For persistence on serverless, mount a writable SQLite file or provide remote persistence; otherwise falls back to in-memory.
+
+## Dev API surface (proposed minimal)
+- `createEngine/ReasonState` — construct the state holder.
+- `applyPatches(patches)` — apply validated patch DSL; appends to log, updates state.
+- `checkpoint/restore/replay` — durability and deterministic rebuild.
+- `contextBuilder.buildContext(state, options)` — deterministic, token-budgeted, summaries-only prompts.
+- `runAgent/recompute` (optional export) — orchestrated flow that calls Grok 4.1 + tools and applies patches.
+Everything else (tool calls, Grok prompts) is handled inside recompute/agent pipelines.
+
+## Docs
+- System prompt and context rules: `docs/system-prompt.md`
+- Context builder contract and patch DSL: `docs/context-builder.md`
 - `npm run build` then deploy `dist/` via Vercel/Netlify; `npm run dev` for local demo.
+- Append-only patch log kept in state history; checkpoints persisted via `saveCheckpoint`/`restore`; `replayHistory` rebuilds deterministically from history (used in tests).
 
 ## Demo checklist (target)
 - 45s flow: Tokyo → retract → Amsterdam; budget 4k ↔ 4.5k ↔ 4k with partial replay.

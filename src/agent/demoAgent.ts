@@ -16,7 +16,11 @@ function clone<T>(obj: T): T {
 }
 
 // Adapter-agnostic demo agent: uses X + Grok + mock booking, but only via patches into ReasonState.
-export async function runDemoAgent(query: string, budget: number): Promise<AgentRun> {
+export async function runDemoAgent(
+  query: string,
+  budget: number,
+  injectedAssumptions: Array<{ summary: string; sourceId?: string; sourceType?: string }> = []
+): Promise<AgentRun> {
   const engine = new ReasonState();
   const events: string[] = [];
   const history: Array<{ state: EchoState; label: string }> = [];
@@ -61,6 +65,23 @@ export async function runDemoAgent(query: string, budget: number): Promise<Agent
     applyStep(xPatches, `Live X: ${xPatches.length} posts`);
   } else {
     events.push("Live X: no results");
+  }
+
+  // Step 2b: injected assumptions (optional)
+  if (injectedAssumptions.length > 0) {
+    const injectPatches: Patch[] = injectedAssumptions.map((a, i) => ({
+      op: "add",
+      path: `/raw/inject-${Date.now()}-${i}`,
+      value: {
+        id: `inject-${Date.now()}-${i}`,
+        type: "assumption",
+        summary: a.summary,
+        assumptionStatus: "valid",
+        sourceId: a.sourceId ?? `inject-${i}`,
+        sourceType: a.sourceType ?? "user"
+      }
+    }));
+    applyStep(injectPatches, `Injected assumptions (${injectedAssumptions.length})`);
   }
 
   // Step 3: Grok plan -> planning patch
