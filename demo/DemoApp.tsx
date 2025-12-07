@@ -150,13 +150,13 @@ export function DemoApp() {
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Destination / goal" style={{ padding: 6, flex: 1, minWidth: 160 }} />
-          <input
-            type="number"
-            value={budget}
-            onChange={(e) => setBudget(Number(e.target.value))}
-            placeholder="Budget"
-            style={{ padding: 6, width: 120 }}
-          />
+        <input
+          type="number"
+          value={budget}
+          onChange={(e) => setBudget(Number(e.target.value))}
+          placeholder="Budget"
+          style={{ padding: 6, width: 120 }}
+        />
           <input
             type="date"
             value={startDate}
@@ -171,17 +171,17 @@ export function DemoApp() {
             placeholder="End"
             style={{ padding: 6, width: 150 }}
           />
-          <input
-            value={factInput}
-            onChange={(e) => setFactInput(e.target.value)}
-            placeholder="Optional new fact / assumption"
+        <input
+          value={factInput}
+          onChange={(e) => setFactInput(e.target.value)}
+          placeholder="Optional new fact / assumption"
             style={{ padding: 6, flex: 1, minWidth: 160 }}
-          />
+        />
           <button onClick={() => runLive()} style={{ padding: "6px 12px" }}>
             Run
-          </button>
-          <button
-            onClick={() => {
+        </button>
+        <button
+          onClick={() => {
               resetCalendarHolds();
               setHistory([]);
               setIdx(0);
@@ -198,20 +198,20 @@ export function DemoApp() {
               setResolvedBookings(0);
               setReusedIds([]);
               setRegeneratedIds([]);
-            }}
-            style={{ padding: "6px 12px" }}
-          >
+          }}
+          style={{ padding: "6px 12px" }}
+        >
             Reset
-          </button>
-        </div>
+        </button>
+      </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
           <AssumptionCard title="Metrics" status="valid" subtitle="Run-level">
             <div style={{ fontSize: 12, color: "#334155", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-              <div>Grok plan length: {plan.length}</div>
-              <div>Blocked actions: {events.filter((e) => e.toLowerCase().includes("blocked")).length}</div>
-              <div>Unknowns: {unknowns.length}</div>
-              <div>Dirty nodes: {dirtyNodes.length}</div>
+            <div>Grok plan length: {plan.length}</div>
+            <div>Blocked actions: {events.filter((e) => e.toLowerCase().includes("blocked")).length}</div>
+            <div>Unknowns: {unknowns.length}</div>
+            <div>Dirty nodes: {dirtyNodes.length}</div>
               <div>Reused nodes: {reusedCount}</div>
               <div>Regenerated: {regeneratedCount}</div>
               <div>Bookings: {resolvedBookings} resolved / {blockedBookings} blocked</div>
@@ -219,7 +219,7 @@ export function DemoApp() {
                 <div style={{ gridColumn: "span 2" }}>
                   Grok validation: attempts {planMeta.attempts ?? "?"}
                   {planMeta.lastError ? ` (last error: ${planMeta.lastError})` : ""}
-                </div>
+          </div>
               )}
             </div>
           </AssumptionCard>
@@ -233,33 +233,33 @@ export function DemoApp() {
                 </>
               ) : (
                 <div>Clean: actions allowed</div>
-              )}
-              <button style={{ marginTop: 6, padding: "4px 8px" }} onClick={checkReplay}>
-                Check determinism
-              </button>
-              {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
-            </div>
+          )}
+          <button style={{ marginTop: 6, padding: "4px 8px" }} onClick={checkReplay}>
+            Check determinism
+          </button>
+          {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
+        </div>
           </AssumptionCard>
-        </div>
+      </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
-            Timeline step: {idx + 1} / {history.length}
-          </label>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(history.length - 1, 0)}
-            value={idx}
-            onChange={(e) => setIdx(Number(e.target.value))}
-            style={{ width: "100%" }}
-          />
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+          Timeline step: {idx + 1} / {history.length}
+        </label>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(history.length - 1, 0)}
+          value={idx}
+          onChange={(e) => setIdx(Number(e.target.value))}
+          style={{ width: "100%" }}
+        />
           <Timeline items={timelineLabels} />
-        </div>
+      </div>
 
-        {plan && (
-          <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
-            <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
+      {plan && (
+        <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
+          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
             {planMetaHistory.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: "#334155" }}>
                 <div style={{ fontWeight: 600 }}>Validation/backoff</div>
@@ -279,47 +279,47 @@ export function DemoApp() {
                 </ul>
               </div>
             )}
-          </AssumptionCard>
-        )}
-
-        <AssumptionCard title="Assumptions" status="valid" subtitle="Click to retract and replay">
-          {assumptions.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#64748b" }}>No active assumptions</div>
-          ) : (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {assumptions.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => handleAssumptionClick(a.id)}
-                  style={{
-                    border: "1px solid #cbd5e1",
-                    borderRadius: 12,
-                    padding: "6px 10px",
-                    background: "#f8fafc",
-                    cursor: "pointer"
-                  }}
-                >
-                  {a.summary ?? a.id}
-                </button>
-              ))}
-            </div>
-          )}
         </AssumptionCard>
+      )}
+
+      <AssumptionCard title="Assumptions" status="valid" subtitle="Click to retract and replay">
+        {assumptions.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>No active assumptions</div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {assumptions.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => handleAssumptionClick(a.id)}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 12,
+                  padding: "6px 10px",
+                  background: "#f8fafc",
+                  cursor: "pointer"
+                }}
+              >
+                {a.summary ?? a.id}
+              </button>
+            ))}
+          </div>
+        )}
+      </AssumptionCard>
 
         <AssumptionCard title="Recent patches" status="valid" subtitle="Last 8">
-          {recentPatches.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
-          ) : (
-            <ul style={{ fontSize: 12, color: "#334155" }}>
-              {recentPatches.map((p, i) => (
-                <li key={`${p.path}-${i}`}>
-                  {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
-                  {(p as any).value?.sourceType ? `[src: ${(p as any).value.sourceType}${(p as any).value.sourceId ? `/${(p as any).value.sourceId}` : ""}]` : ""}
-                </li>
-              ))}
-            </ul>
-          )}
-        </AssumptionCard>
+        {recentPatches.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
+        ) : (
+          <ul style={{ fontSize: 12, color: "#334155" }}>
+            {recentPatches.map((p, i) => (
+              <li key={`${p.path}-${i}`}>
+                {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
+                {(p as any).value?.sourceType ? `[src: ${(p as any).value.sourceType}${(p as any).value.sourceId ? `/${(p as any).value.sourceId}` : ""}]` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </AssumptionCard>
 
         <AssumptionCard title="What the model saw" status="valid" subtitle="Summaries-only context snapshot">
           <button style={{ fontSize: 12, marginBottom: 6 }} onClick={() => setShowModelContext((s) => !s)}>
@@ -349,21 +349,21 @@ export function DemoApp() {
             <>
               {patchLog.length === 0 ? (
                 <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
-              ) : (
+        ) : (
                 <ul style={{ fontSize: 12, color: "#334155", maxHeight: 200, overflow: "auto" }}>
                   {[...patchLog].reverse().map((p, i) => {
                     const val = (p as any).value as any;
-                    return (
+              return (
                       <li key={`${p.path}-${i}`}>
                         {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
                         {val?.status ? `[status=${val.status}]` : ""}{" "}
                         {val?.createdAt ? `[created=${val.createdAt}]` : ""} {val?.updatedAt ? `[updated=${val.updatedAt}]` : ""}{" "}
                         {val?.sourceType ? `[src: ${val.sourceType}${val.sourceId ? `/${val.sourceId}` : ""}]` : ""}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
             </>
           )}
         </AssumptionCard>
@@ -402,7 +402,7 @@ export function DemoApp() {
           <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", color: "#0f172a", maxHeight: 220, overflow: "auto" }}>
             {JSON.stringify(current?.state, null, 2)}
           </pre>
-        </AssumptionCard>
+      </AssumptionCard>
       </div>
     </div>
   );
