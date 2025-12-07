@@ -49,6 +49,7 @@ export async function runSimpleAgent(
           details: { destination: query, budget }
         }
       },
+      { op: "add", path: "/summary/goal", value: `Goal: ${query}` },
       {
         op: "add",
         path: "/raw/budget",

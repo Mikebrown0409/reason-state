@@ -65,6 +65,8 @@ export async function runXAgent(
         path: "/raw/assumption-destination",
         value: { id: "assumption-destination", type: "assumption", assumptionStatus: "valid", summary: `Destination=${query}` }
       }
+      ,
+      { op: "add", path: "/summary/goal", value: `Goal: ${query}` }
     ],
     `Seed goal (${budget.toLocaleString()} budget)`
   );
