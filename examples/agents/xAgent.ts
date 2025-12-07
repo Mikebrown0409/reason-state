@@ -10,6 +10,7 @@ export type XAgentResult = {
   plan?: string;
   planPatches?: Patch[];
   planMeta?: Omit<GrokPlanResult, "patches">;
+  planMetaHistory?: Array<Omit<GrokPlanResult, "patches"> & { label: string }>;
   xCount: number;
 };
 
@@ -32,6 +33,7 @@ export async function runXAgent(
   const engine = new ReasonState();
   const events: string[] = [];
   const history: Array<{ state: EchoState; label: string }> = [];
+  const planMetaHistory: Array<Omit<GrokPlanResult, "patches"> & { label: string }> = [];
 
   const applyStep = (patches: Patch[], label: string) => {
     engine.applyPatches(patches);
@@ -97,22 +99,36 @@ export async function runXAgent(
     applyStep(injectPatches, `Injected assumptions (${injectedAssumptions.length})`);
   }
 
-  // Grok plan (validated patches)
+  // Grok plan (validated patches), multi-turn governance-aware
+  const planSummaries: string[] = [];
   let planPatches: Patch[] | undefined;
-  let planSummary: string | undefined;
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
-  try {
-    const planRes = await grokPlanWithContext(engine.snapshot, `Create a concise plan for: ${query}, budget ${budget}`);
-    planPatches = planRes.patches;
-    planMeta = { attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw };
-    if (planPatches.length > 0) {
-      applyStep(planPatches, "Grok plan ready");
-      planSummary = JSON.stringify(planPatches, null, 2);
-    } else {
-      events.push("Grok plan empty");
+
+  async function runPlanTurn(label: string, goal: string) {
+    try {
+      const planRes = await grokPlanWithContext(engine.snapshot, goal);
+      planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
+      if (planRes.patches.length > 0) {
+        planPatches = planRes.patches;
+        applyStep(planRes.patches, label);
+        planSummaries.push(JSON.stringify(planRes.patches, null, 2));
+      } else {
+        events.push(`${label}: empty plan`);
+      }
+      planMeta = { attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw };
+    } catch (err) {
+      events.push(`${label}: Grok error ${String(err)}`);
     }
-  } catch (err) {
-    events.push(`Grok error: ${String(err)}`);
+  }
+
+  await runPlanTurn("Plan turn 1", `Create a concise plan for: ${query}, budget ${budget}`);
+
+  const hasBlockers = (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
+  if (!planPatches || hasBlockers) {
+    await runPlanTurn(
+      "Plan turn 2 (resolve blockers)",
+      `Resolve blockers/unknowns and refine plan for: ${query}, budget ${budget}. Prioritize clearing unknowns/dirty nodes.`
+    );
   }
 
   // Booking
@@ -133,6 +149,8 @@ export async function runXAgent(
     events.push(`Grok validation: attempts=${planMeta.attempts}${planMeta.lastError ? ` lastError=${planMeta.lastError}` : ""}`);
   }
 
-  return { history, events, plan: planSummary, planPatches, planMeta, xCount };
+  const planSummary = planSummaries.join("\n---\n");
+
+  return { history, events, plan: planSummary, planPatches, planMeta, planMetaHistory, xCount };
 }
 

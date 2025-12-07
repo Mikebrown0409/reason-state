@@ -10,23 +10,23 @@ export function propagateDirty(state: EchoState, nodeIds: string[]): EchoState {
     const node = state.raw[id];
     if (!node) continue;
     node.dirty = true;
-    if (node.parentId) queue.push(node.parentId);
-    (node.children ?? []).forEach((childId) => queue.push(childId));
+    neighbors(state, id).forEach((n) => queue.push(n));
   }
   return state;
 }
 
 // Detect contradictions by scanning nodes that explicitly reference conflicts.
 export function detectContradictions(state: EchoState): string[] {
-  const contradictions: string[] = [];
+  const contradictions: Set<string> = new Set();
   for (const node of Object.values(state.raw)) {
     const details = node.details as Record<string, unknown> | undefined;
     const conflictingId = details?.contradicts as string | undefined;
     if (conflictingId && state.raw[conflictingId]) {
-      contradictions.push(conflictingId);
+      contradictions.add(node.id);
+      contradictions.add(conflictingId);
     }
   }
-  return contradictions;
+  return Array.from(contradictions);
 }
 
 export function canExecute(type: NodeType, state: EchoState): boolean {
@@ -44,6 +44,12 @@ export function canExecute(type: NodeType, state: EchoState): boolean {
 
 // Minimal reconciliation: clears dirty flags after semantic activation stub.
 export function applyReconciliation(state: EchoState): EchoState {
+  // Mark contradictions dirty so gating sees them; self-heal can resolve later.
+  const contradictions = detectContradictions(state);
+  if (contradictions.length) {
+    propagateDirty(state, contradictions);
+  }
+
   for (const node of Object.values(state.raw)) {
     if (node.dirty) {
       node.summary = node.summary ?? stringifyDetails(node);
@@ -60,5 +66,22 @@ function stringifyDetails(node: StateNode): string {
   } catch {
     return "";
   }
+}
+
+function neighbors(state: EchoState, id: string): string[] {
+  const node = state.raw[id];
+  if (!node) return [];
+  const adj = new Set<string>();
+  if (node.parentId) adj.add(node.parentId);
+  (node.children ?? []).forEach((c) => adj.add(c));
+  const details = node.details as Record<string, unknown> | undefined;
+  const conflictingId = details?.contradicts as string | undefined;
+  if (conflictingId && state.raw[conflictingId]) adj.add(conflictingId);
+  // reverse contradiction edges
+  for (const other of Object.values(state.raw)) {
+    const otherConflicts = (other.details as Record<string, unknown> | undefined)?.contradicts;
+    if (otherConflicts === id) adj.add(other.id);
+  }
+  return Array.from(adj);
 }
 

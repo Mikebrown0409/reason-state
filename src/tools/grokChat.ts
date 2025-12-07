@@ -15,19 +15,26 @@ function getGrokKey(): string {
 
 const DEFAULT_MODEL = "grok-4-1-fast-reasoning-latest";
 const DEFAULT_BASE = "https://api.x.ai/v1";
+
+const FEW_SHOT = [
+  "Good example (do this):",
+  '[{"op":"replace","path":"/summary/goal","value":"Goal: plan Tokyo under $4k (source: user/input-1)"}]',
+  "",
+  "Bad example (do NOT do this):",
+  '[{"op":"add","path":"/raw/new-node","value":{"id":"new-node","details":{"secret":true}}}]'
+].join("\n");
+
 export const SYSTEM_PROMPT = [
   "You are Reason-State reconciliation. Governed JSON graph, append-only patches, no deletes.",
   "Rules (must follow exactly):",
-  "- Details are authoritative; do not invent or alter details.",
-  "- Summaries must be faithful, concise, goal-oriented, and cite sourceType/sourceId when present.",
+  "- You may ONLY write to /summary/{id}. Do not write /raw; tools own details and structure.",
   "- Allowed ops: add or replace only.",
-  "- Allowed paths: /raw/{id} or /summary/{id}.",
-  "- Allowed status values: open, blocked, resolved, dirty (no other statuses).",
-  "- Use existing node ids from context when updating; do NOT invent new ids. For new nodes, leave value.id empty; engine will assign.",
-  "- Do NOT write details; tools own details. Only set summary/status/type/id/source fields.",
-  "- Maintain lineage on new/updated nodes: sourceType + sourceId when available.",
-  "- Keep context token-budgeted; do not request more data.",
-  "- Output a JSON array of patches (no prose). If unsure, return an empty array."
+  "- Summary values must be strings; keep concise, faithful to context, and cite sourceType/sourceId when present.",
+  "- Use existing node ids from context when updating; do NOT invent new ids. If unsure, return an empty array.",
+  "- Maintain lineage in the summary text when relevant (e.g., mention sourceType/sourceId).",
+  "- Output a JSON array of patches (no prose). If unsure, return an empty array.",
+  "",
+  FEW_SHOT
 ].join("\n");
 
 declare const __VITE_GROK_API_KEY__: string;
@@ -65,7 +72,6 @@ export async function grokChat(prompt: string, model = DEFAULT_MODEL): Promise<s
 }
 
 const ALLOWED_OPS = new Set(["add", "replace"]);
-const ALLOWED_STATUS = new Set(["open", "blocked", "resolved", "dirty"]);
 
 function validatePath(path: string): { bucket: "raw" | "summary"; id: string } {
   const match = path.match(/^\/(raw|summary)\/([^/]+)$/);
@@ -95,6 +101,10 @@ export function validateModelPatches(content: string, knownIds: Set<string>): Pa
     }
     if (typeof path !== "string") throw new Error("path must be string");
     const { bucket, id } = validatePath(path);
+
+    if (bucket === "raw") {
+      throw new Error("LLM patches may not write to /raw; summaries only");
+    }
 
     // Replace must target known ids; add may be new.
     if (op === "replace" && !knownIds.has(id)) {

@@ -4,25 +4,25 @@ import { applyPatches } from "../src/engine/ReasonState.js";
 import { createEmptyState } from "../src/engine/types.js";
 
 describe("validateModelPatches", () => {
-  it("rejects invalid op and status", () => {
+  it("rejects invalid op and raw writes", () => {
     const known = new Set<string>(["goal"]);
     expect(() =>
       validateModelPatches(
         JSON.stringify([
-          { op: "delete", path: "/raw/goal", value: { id: "goal" } },
-          { op: "add", path: "/raw/new", value: { id: "new", status: "planned" } }
+          { op: "delete", path: "/summary/goal", value: "x" },
+          { op: "add", path: "/raw/new", value: { id: "new" } }
         ]),
         known
       )
     ).toThrow(/invalid op/i);
   });
 
-  it("allows add and replace with allowed status", () => {
+  it("allows add and replace on summaries only", () => {
     const known = new Set<string>(["goal"]);
     const patches = validateModelPatches(
       JSON.stringify([
-        { op: "replace", path: "/raw/goal", value: { id: "goal", status: "open" } },
-        { op: "add", path: "/raw/new", value: { status: "blocked" } }
+        { op: "replace", path: "/summary/goal", value: "updated goal" },
+        { op: "add", path: "/summary/new", value: "new summary" }
       ]),
       known
     );
@@ -88,7 +88,7 @@ describe("applyPatches uuid assignment", () => {
         JSON.stringify([{ op: "add", path: "/raw/goal", value: { id: "goal", details: { foo: "bar" } } }]),
         known
       )
-    ).toThrow(/details not allowed from model/i);
+    ).toThrow(/summaries only|may not write to \/raw/i);
   });
 
   it("rejects summary value that is not a string", () => {
