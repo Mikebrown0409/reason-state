@@ -27,13 +27,16 @@ async function main() {
   requireEnv("GROK_API_KEY");
   // X is optional; test can run without X if not set
 
+  const injectContradiction = process.argv.includes("--inject-contradiction");
+
   const res = await runDagAgent(
     "Tokyo",
     4000,
     [],
     {
       bookingDates: { startDate: "2025-12-10", endDate: "2025-12-15" },
-      useX: false
+      useX: false,
+      injectContradiction
     },
     undefined
   );
@@ -47,6 +50,10 @@ async function main() {
   console.log("last state summary keys:", Object.keys(res.history[res.history.length - 1].state.summary ?? {}));
   console.log("unknowns:", res.history[res.history.length - 1].state.unknowns);
   console.log("bookings:", Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter((n: any) => n.type === "action"));
+  const contradictions = Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter(
+    (n: any) => Array.isArray((n as any).contradicts) && (n as any).contradicts.length > 0
+  );
+  console.log("contradictions:", contradictions);
 
   if (!res.history.length) throw new Error("No history produced");
   if (!res.events.length) throw new Error("No events produced");

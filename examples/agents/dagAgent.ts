@@ -19,6 +19,7 @@ export type DagAgentOptions = ReasonStateOptions & {
   bookingDates?: { startDate: string; endDate: string };
   useX?: boolean;
   xQuery?: string;
+  injectContradiction?: boolean;
 };
 
 function clone<T>(obj: T): T {
@@ -196,6 +197,38 @@ export async function runDagAgent(
     bookingPatches,
     bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked" ? "Booking blocked" : "Booking placed"
   );
+
+  // Optional injected contradiction to showcase self-heal
+  if (options.injectContradiction) {
+    const contradictionId = `contradiction-${Date.now()}`;
+    const goalNode = engine.snapshot.raw["goal"];
+    const contradictory = goalNode
+      ? {
+          id: contradictionId,
+          type: "planning",
+          status: "open",
+          summary: `Conflicting plan for ${goal} (alternate)`,
+          details: { destination: goal, budget: budget + 1000, contradicts: ["goal"] },
+          contradicts: ["goal"],
+          sourceType: "agent",
+          sourceId: "dag-contradiction"
+        }
+      : {
+          id: contradictionId,
+          type: "planning",
+          status: "open",
+          summary: "Conflicting plan (no goal present)",
+          contradicts: ["goal"],
+          sourceType: "agent",
+          sourceId: "dag-contradiction"
+        };
+    const contradictionPatch: Patch = {
+      op: "add",
+      path: `/raw/${contradictionId}`,
+      value: contradictory
+    };
+    await applyStep([contradictionPatch], "Inject contradiction");
+  }
 
   // Self-heal/replay checkpoint (optional deterministic check)
   try {
