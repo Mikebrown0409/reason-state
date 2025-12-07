@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node demo/DemoApp.test.ts",
+    "test": "tsx demo/DemoApp.test.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.4",
     "@langchain/langgraph": "^0.2.0",
     "better-sqlite3": "^9.0.0",
     "canvas-confetti": "^1.9.0",
@@ -20,8 +21,8 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0",
     "vite": "^5.0.0"
   }
 }
-

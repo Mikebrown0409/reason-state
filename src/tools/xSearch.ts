@@ -8,7 +8,9 @@ declare const __VITE_GROK_API_KEY__: string;
 function getBearer(): string | undefined {
   const token =
     (globalThis as any)?.process?.env?.X_BEARER_TOKEN ??
+    (globalThis as any)?.process?.env?.VITE_X_BEARER_TOKEN ??
     (globalThis as any)?.process?.env?.GROK_API_KEY ??
+    (globalThis as any)?.process?.env?.VITE_GROK_API_KEY ??
     (typeof import.meta !== "undefined"
       ? (import.meta as any)?.env?.VITE_X_BEARER_TOKEN ?? (import.meta as any)?.env?.VITE_GROK_API_KEY
       : undefined) ??

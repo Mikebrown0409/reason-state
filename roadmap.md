@@ -10,12 +10,12 @@ goals
 critical path checklist (progress, no overestimation)
 - [x] 0) alignment & skeleton: scope locked, file tree + MIT/license/pkg/tsconfig/vite/README scaffolded.
 - [x] 1) state model & types: `src/engine/types.ts` with lifecycles + inline console.asserts.
-- [~] 2) patch engine & reconciliation: core functions implemented; needs stronger validation, richer summary regen, and explicit tests for budget supersede/prune + contradiction swap coverage.
+- [~] 2) patch engine & reconciliation: core functions + validation in place; summary regen still minimal; tests exist via console.assert but need richer coverage for budget supersede/prune and contradiction swaps.
 - [x] 3) storage & checkpoints: better-sqlite3 CRUD with in-memory fallback, inline checkpoint asserts.
-- [~] 4) adapters & tools: LangGraph gate wired; `xSearch` hits Grok/X; `mockBooking` blocks on unknowns; still need explicit tests for dirty no-op and booking unblock.
-- [~] 5) demo flow & ui: DemoApp flow stubbed (Tokyo→Amsterdam + budget tweaks), Timeline with Framer, cards present; missing live X previews, metrics logging, confetti, and full 45s polish.
-- [ ] 6) polish, docs, build: README partially updated; still need demo GIF placeholder, LangGraph example, deploy steps, LOC audit, tsc run in pipeline.
-- [ ] 7) dry run & verification: pending full demo run, metrics validation, replay determinism check.
+- [~] 4) adapters & tools: LangGraph gate wired; `xSearch` now working via proxy with `start_time`; `mockBooking` blocks/unblocks; some asserts added—still want explicit dirty no-op/adapter gating tests.
+- [~] 5) demo flow & ui: Demo flow running with live X previews, metrics log, confetti, Framer timeline; still need 45s polish (animations/voice stub) and full E2E click-through.
+- [ ] 6) polish, docs, build: README needs final env instructions (.env.example), LangGraph example, demo GIF placeholder, deploy steps, LOC audit, tsc in pipeline.
+- [ ] 7) dry run & verification: pending full demo run (Tokyo→Amsterdam, budget swing), metrics validation, replay determinism check.
 
 risk & mitigation
 - SDK/env (Grok/X): keys available; must run real calls; add graceful degradation to live public search (no canned data).

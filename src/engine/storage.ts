@@ -12,7 +12,8 @@ export async function saveCheckpoint(
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  if (isBrowser) {
+  // Use in-memory store for browser and for default ":memory:" to avoid per-connection SQLite isolation.
+  if (isBrowser || dbPath === DEFAULT_DB) {
     const checkpoint: Checkpoint = { id, state, createdAt, turnId };
     memStore.set(id, checkpoint);
     if (!state.checkpoints) state.checkpoints = {};
@@ -34,7 +35,7 @@ export async function loadCheckpoint(
   id: string,
   dbPath = DEFAULT_DB
 ): Promise<Checkpoint> {
-  if (isBrowser) {
+  if (isBrowser || dbPath === DEFAULT_DB) {
     const cp = memStore.get(id);
     if (!cp) throw new Error(`Checkpoint not found: ${id}`);
     return cp;
