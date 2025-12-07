@@ -57,6 +57,21 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
   const nodes = Object.values(state.raw ?? {});
   const lines: string[] = [];
 
+  const priority = (n: StateNode): number => {
+    if (n.dirty) return 0;
+    if (n.type === "assumption") return 1;
+    if (n.type === "unknown") return 2;
+    if (n.type === "fact") return 3;
+    if (n.type === "planning") return 4;
+    return 5;
+  };
+
+  const updatedAt = (n: StateNode): number => {
+    const ts = (n as any).updatedAt ?? (n as any).createdAt;
+    const t = ts ? Date.parse(ts) : 0;
+    return Number.isNaN(t) ? 0 : t;
+  };
+
   const select = (bucket: BucketSelector): StateNode[] => {
     let selected = nodes;
     if (bucket.nodeIds && bucket.nodeIds.length) {
@@ -70,7 +85,14 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
     if (bucket.predicate) {
       selected = selected.filter(bucket.predicate);
     }
-    return selected.sort((a, b) => a.id.localeCompare(b.id));
+    return selected.sort((a, b) => {
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      const ua = updatedAt(b) - updatedAt(a);
+      if (ua !== 0) return ua;
+      return a.id.localeCompare(b.id);
+    });
   };
 
   for (const bucket of buckets) {

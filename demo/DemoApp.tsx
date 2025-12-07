@@ -5,6 +5,7 @@ import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
 import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
 import { runDagAgent } from "../examples/agents/dagAgent.js";
+import { planAndAct } from "../src/agent/planAndAct.js";
 import { resetCalendarHolds } from "../src/tools/mockBooking.js";
 import confetti from "canvas-confetti";
 
@@ -84,15 +85,13 @@ export function DemoApp() {
             },
             initialState
           )
-        : runDemoAgent(
-            q,
-            b,
-            injected,
-            {
-              bookingDates: startDate && endDate ? { startDate, endDate } : undefined
-            },
+        : planAndAct({
+            goal: q,
+            budget: b,
+            facts: injected,
+            bookingDates: startDate && endDate ? { startDate, endDate } : undefined,
             initialState
-          );
+          });
     runner.then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
@@ -213,7 +212,7 @@ export function DemoApp() {
     <div style={{ maxWidth: 1200, margin: "0 auto", fontFamily: "Inter, sans-serif", padding: 16, display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 12 }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <h1 style={{ margin: 0 }}>reason-state time machine</h1>
+          <h1 style={{ margin: 0 }}>ReasonState — Governed Memory & Replay</h1>
           <span
             style={{
               padding: "4px 10px",
@@ -264,6 +263,11 @@ export function DemoApp() {
           <button onClick={() => runLive()} style={{ padding: "6px 12px" }}>
             Run
         </button>
+          {agentMode === "simple" && (
+            <button onClick={() => runLive(undefined, "semantic")} style={{ padding: "6px 12px" }}>
+              Recompute (new facts)
+            </button>
+          )}
         <button
           onClick={() => {
               resetCalendarHolds();

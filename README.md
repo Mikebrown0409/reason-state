@@ -1,82 +1,94 @@
-# reason-state (hackathon draft)
+# reason-state
 
-Light, deterministic OS layer for AI agents: patch-based reactive state, uncertainty-aware reasoning, self-heal, and replay. Built for the xAI Jarvis track. Total LOC <1,000; TypeScript-only; minimal dependencies per spec.
+Deterministic, governed memory for AI agents: JSON-first state, patch DSL, summaries-only context, governance (unknown/dirty/depends_on/temporal/contradicts), replay/time-travel, and partial recompute. TypeScript-only; minimal deps.
 
-## Quick start (draft)
+## Quick start
 ```bash
 npm install
 npm run dev
 ```
 
-### Usage (engine)
+### Minimal API (<10 LOC)
 ```ts
-import { ReasonState, applyPatches, retractAssumption } from "reason-state";
+import { planAndAct } from "reason-state/agent/planAndAct.js";
 
-const engine = new ReasonState({ dbPath: ":memory:" });
-applyPatches([{ op: "add", path: "/raw/u1", value: { id: "u1", type: "unknown" } }], engine.snapshot);
-// will block until unknown resolved
-retractAssumption("u1", engine.snapshot);
+const res = await planAndAct({
+  goal: "Plan Tokyo trip",
+  budget: 4000,
+  facts: [{ summary: "Allergic to sushi" }],
+  bookingDates: { startDate: "2025-12-10", endDate: "2025-12-15" }
+});
+console.log(res.agentMessage);        // agent note (always present; fallback if model skips)
+console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
 ```
 
-## Vision (condensed)
-- Details vs summary duality: immutable raw data, LLM-generated summaries.
-- Append-only patches with dirty propagation and governed actions.
-- Unknown/assumption lifecycle, self-healing validator, contradiction archival.
-- Replay/time travel with per-turn checkpoints and delta reapply.
+### Facade
+```ts
+import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/api/facade.js";
+```
+- `addNode/updateNode`: validated, append-only patches.
+- `recompute`: semantic plan+act (uses built-in prompt, agent-note fallback, booking governance).
+- `rollbackSubtree`: temporal/tool replay for a specific node id.
 
-## File map (target)
-- `src/engine`: core ReasonState, types, storage, reconciliation.
-- `src/tools`: X search + mock booking (blocked on unknowns).
-- `src/adapters`: LangGraph wrapper.
-- `src/ui`: Timeline + Assumption card components.
-- `demo`: DemoApp and tests (45s flow: Tokyo → Amsterdam retract).
+## What’s in the box
+- JSON-first governed graph: raw vs summary, lineage, timestamps, edges (`depends_on`, `contradicts`, `temporalBefore/After`), no deletes.
+- Patch DSL (add/replace only), Zod-validated, engine-assigned UUIDs.
+- Governance: dirty/unknown gating, dependency/temporal blocking, contradiction detection, self-heal/rollback helpers.
+- Context builder: summaries-only, deterministic ordering, prioritizes dirty/new/assumptions, token budgeted.
+- Replay/time-travel: NDJSON append-only log + checkpoints; `replayFromLog` deterministic rebuild.
+- Tools: Grok 4.1 planner (strict prompt/validation/backoff), X search (fails loud w/o token), real-ish booking with calendar clash + Stripe-test + governance gating.
+- Default agent wrapper: `planAndAct` with built-in prompt, agent-note fallback, booking supersede, single-call signature.
 
-## Demo flow (goal)
-1) Plan Tokyo retreat ($4k, Dec 12–19) → X search → Grok plan → mock booking.
-2) Retract Tokyo → Amsterdam replay.
-3) Budget tweak $4k ↔ $4.5k with partial replay.
+## File map
+- `src/engine`: core ReasonState, types, storage, reconciliation, replay.
+- `src/tools`: `grokChat`, `xSearch`, `mockBooking`.
+- `src/context`: context builder.
+- `src/agent/planAndAct.ts`: default helper (plan+act, fallback).
+- `src/api/facade.ts`: minimal facade (add/update/recompute/rollback).
+- `examples/agents`: dag/simple examples.
+- `demo`: DemoApp (rollback/recompute/diff/replay UI).
+
+## Demo flow
+- Plan trip → add facts → semantic recompute (agent note updates, diff view).
+- Date clash → rollback subtree (temporal/tool), supersede stale blocked bookings.
+- Replay & verify: rebuild from log and show hash match/badges.
 
 ## Notes
-- Dependencies locked to whitelist; no extras without approval.
-- X calls use bearer token (app-only). Set `X_BEARER_TOKEN` (or `GROK_API_KEY`) in env.
-- Vercel deploy placeholder; SQLite with in-memory fallback included.
+- No fallbacks: missing keys error loudly (Grok/X).
+- Calendar holds: mock booking enforces clash; supersede clears stale blocked nodes; identical hold reuse allowed.
+- Governance first: actions blocked on unknown/dirty/deps/temporal; rollback/recompute provided.
 
 ## Env
-- Copy `.env.example` to `.env` and fill:
-  - `VITE_X_BEARER_TOKEN`, `VITE_GROK_API_KEY` (required)
+- Copy `.env.example` → `.env`:
+  - `VITE_GROK_API_KEY` (required)
+  - `VITE_X_BEARER_TOKEN` (required if using X search)
   - `VITE_X_BASE_URL`, `VITE_GROK_BASE_URL` (optional)
-  - No fallbacks: missing keys will raise errors (we do not silently skip).
 
-## What's verified (demo)
-- Live X search populates assumptions.
-- Live Grok plan patch applied to state.
-- Mock booking gated by unknowns/dirty.
-- Slider/time machine driven by live agent patches (X→Grok→booking).
-- Determinism check button replays patches and compares state.
-- Grok 4.1 used for plan/patching via deterministic, summaries-only context builder; patch DSL validated (no deletes).
- - Missing X/Grok keys will fail loud; set env before running demo.
-- Log format: NDJSON, one patch per line. Provide `logPath` to `ReasonState` to append; use `replayFromLog` to rebuild.
+## Verified behaviors
+- Grok 4.1 non-reasoning with strict prompt/validation/backoff; no details allowed; add/replace only.
+- Summaries-only context; dirty/new/assumptions prioritized; no raw details to model.
+- Booking tool gates unknowns, missing dates, and date clashes; supersede on success.
+- Determinism: replay from NDJSON log matches live state; replay badge shows patch count and match.
+- No silent fallbacks: missing Grok/X keys throw.
 
 ## Deploy (draft)
 - Set env: `GROK_API_KEY` (or `X_BEARER_TOKEN`) for X search.
 - For persistence on serverless, mount a writable SQLite file or provide remote persistence; otherwise falls back to in-memory.
 
-## Dev API surface (proposed minimal)
-- `createEngine/ReasonState` — construct the state holder.
-- `applyPatches(patches)` — apply validated patch DSL; appends to log, updates state.
-- `checkpoint/restore/replay` — durability and deterministic rebuild.
-- `contextBuilder.buildContext(state, options)` — deterministic, token-budgeted, summaries-only prompts.
-- `runAgent/recompute` (optional export) — orchestrated flow that calls Grok 4.1 + tools and applies patches.
-Everything else (tool calls, Grok prompts) is handled inside recompute/agent pipelines.
+## Dev API surface (current)
+- `ReasonState` — governed state + applyPatchesWithCheckpoint/replayFromLog.
+- `planAndAct` — default plan+act wrapper (prompt baked, agent-note fallback, booking).
+- `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree`.
+- `contextBuilder.buildContext` — deterministic summaries-only context.
+- `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules).
 
 ## Docs
-- System prompt and context rules: `docs/system-prompt.md`
-- Context builder contract and patch DSL: `docs/context-builder.md`
-- `npm run build` then deploy `dist/` via Vercel/Netlify; `npm run dev` for local demo.
-- Append-only patch log kept in state history; checkpoints persisted via `saveCheckpoint`/`restore`; `replayHistory` rebuilds deterministically from history (used in tests).
+- System prompt: `docs/system-prompt.md` (add/replace only; no /raw writes from model; statuses open/blocked/resolved/dirty).
+- Context builder: `docs/context-builder.md`.
+- NDJSON log + replay usage noted above.
 
-## Demo checklist (target)
-- 45s flow: Tokyo → retract → Amsterdam; budget 4k ↔ 4.5k ↔ 4k with partial replay.
-- Live X previews visible; metrics logged (tokens saved, blocked actions, self-heal); confetti on success.
-- Actions blocked on unknowns/dirty; replay deterministic; append-only patches enforced.
+## Demo checklist (current)
+- Simple mode uses `planAndAct` (no X): add facts → recompute → agent-note updates; date clash → rollback subtree; diff and replay badges shown.
+- DAG mode: rollback/recompute, node chips, diff, replay, governance badges.
+- Replay & verify shows log length and raw/summary match.
 

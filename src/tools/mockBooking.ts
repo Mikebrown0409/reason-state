@@ -232,6 +232,11 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
         sourceType: "booking",
         sourceId: bookingId
       }
+    },
+    {
+      op: "add",
+      path: `/summary/${bookingId}`,
+      value: `Booking ${bookingId}: resolved (${input.destination} ${input.startDate}–${input.endDate})`
     }
   ];
 }

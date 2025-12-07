@@ -175,8 +175,8 @@ export async function runDagAgent(
   }
 
   // Fallback: if Grok didn't refresh agent-note, surface the latest injected facts so the UI reflects them.
-  if ((!agentNote || agentNote === "Agent note: pending") && injectedFacts && injectedFacts.length > 0) {
-    const factsText = injectedFacts.map((f) => f.summary).join("; ");
+  if ((!agentNote || agentNote === "Agent note: pending") && injectedAssumptions && injectedAssumptions.length > 0) {
+    const factsText = injectedAssumptions.map((f) => f.summary).join("; ");
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
