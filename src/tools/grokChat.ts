@@ -13,7 +13,7 @@ function getGrokKey(): string {
   return key;
 }
 
-const DEFAULT_MODEL = "grok-4-1-fast-reasoning-latest";
+const DEFAULT_MODEL = "grok-4-1-fast-non-reasoning-latest";
 const DEFAULT_BASE = "https://api.x.ai/v1";
 
 const FEW_SHOT = [
