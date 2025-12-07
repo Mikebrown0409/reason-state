@@ -1,0 +1,36 @@
+---
+alwaysApply: true
+---
+
+## 6. NO MOCKS, NO WEAK TESTS, NO FAKE AGENTS — BATTLE-TESTED ONLY
+
+- **Zero Mock Tools in Final Demo**: All tools and data sources must be **real or real-equivalent**.  
+  - `xSearch.ts` must use the **actual X API** (`@xai/grok-sdk` or official X endpoints).  
+  - If API key missing for demo, fall back to **live public X posts** via keyword/semantic search with `since:2025-12-06` (real data, no hardcoded JSON).  
+  - Booking tool can be fake **only if it returns realistic structured data** and is blocked by `canExecute()` when unknowns exist — never a no-op.
+
+- **LangGraph Agent Must Be Real and Battle-Tested**:  
+  - The demo agent (research → plan → book) must be a **fully compiled LangGraph StateGraph** with real nodes:  
+    - `researchX`: Calls real X API → creates real assumptions with `sourceId: post_id`.  
+    - `planWithGrok`: Calls **Grok-4.1** (not mock) → outputs real patches/summaries.  
+    - `bookTravel`: Calls a real-ish tool (e.g., mock Stripe + real calendar check) and is **blocked** if unknowns or dirty nodes exist.  
+  - The graph must survive full end-to-end runs: Tokyo plan → Amsterdam retract → replay → new plan with **different X posts pulled live**.
+
+- **No Hardcoded Plans or Fake Outputs**:  
+  - Forbidden: `if (query.includes("Tokyo")) return fakePlan`.  
+  - Allowed: Seeded prompts for consistency (e.g., same system prompt), but Grok response must be real.  
+  - Timeline must show **real X post previews** (text + media) from actual search results.
+
+- **Testing Standard**:  
+  - Every core function (`applyPatches`, `retractAssumption`, `selfHealAndReplay`) must have **real integration tests** using a live Grok call and real X data (even if rate-limited to 2-3 calls).  
+  - Include a `DemoApp.test.ts` that runs the full LangGraph agent twice:  
+    1. Tokyo plan  
+    2. Retract destination → Amsterdam replay  
+    → Assert: Different hotels, same flights (if budget unchanged), token savings >80%, no full re-roll.
+
+- **If You Can’t Make It Real, You Fail the Rule**:  
+  - If real X/Grok calls are blocked (quota/API key), the assistant must say:  
+    > “Cannot generate — violates Rule #6 (no mocks). Provide API key or use live public X data fallback.”  
+  - No exceptions. Weak demo = dead in Jarvis.
+
+This rule ensures reason-state is not another toy wrapper — it’s the **real, battle-tested OS layer** that survives contact with actual Grok-4.1 and live X data. Judges will smell fake in 5 seconds.
