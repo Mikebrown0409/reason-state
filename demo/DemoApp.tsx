@@ -4,6 +4,7 @@ import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
 import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
+import { runDagAgent } from "../examples/agents/dagAgent.js";
 import { resetCalendarHolds } from "../src/tools/mockBooking.js";
 import confetti from "canvas-confetti";
 
@@ -37,20 +38,31 @@ export function DemoApp() {
   const [showModelContext, setShowModelContext] = useState(false);
   const [agentMessage, setAgentMessage] = useState<string>("");
   const [planMessages, setPlanMessages] = useState<string[]>([]);
+  const [agentMode, setAgentMode] = useState<"simple" | "dag">("simple");
 
   const runLive = () => {
     const q = query;
     const b = budget;
     const injected = factInput ? [{ summary: factInput }] : [];
-    runDemoAgent(
-      q,
-      b,
-      injected,
-      {
-        bookingDates: startDate && endDate ? { startDate, endDate } : undefined
-      },
-      current?.state
-    ).then((res) => {
+    const runner =
+      agentMode === "dag"
+        ? runDagAgent(
+            q,
+            b,
+            injected,
+            { bookingDates: startDate && endDate ? { startDate, endDate } : undefined, useX: false },
+            current?.state
+          )
+        : runDemoAgent(
+            q,
+            b,
+            injected,
+            {
+              bookingDates: startDate && endDate ? { startDate, endDate } : undefined
+            },
+            current?.state
+          );
+    runner.then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
       setIdx(withIdx.length - 1);
@@ -159,6 +171,10 @@ export function DemoApp() {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <select value={agentMode} onChange={(e) => setAgentMode(e.target.value as "simple" | "dag")} style={{ padding: 6 }}>
+            <option value="simple">Simple agent</option>
+            <option value="dag">DAG agent</option>
+          </select>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Destination / goal" style={{ padding: 6, flex: 1, minWidth: 160 }} />
         <input
           type="number"
