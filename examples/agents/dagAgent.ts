@@ -2,6 +2,7 @@ import { ReasonState } from "../../src/engine/ReasonState.js";
 import type { EchoState, Patch, ReasonStateOptions } from "../../src/engine/types.js";
 import { grokPlanWithContext, type GrokPlanResult } from "../../src/tools/grokChat.js";
 import { mockBooking } from "../../src/tools/mockBooking.js";
+import { buildRollbackPatches } from "../../src/engine/reconciliation.js";
 import { xSearch } from "../../src/tools/xSearch.js";
 
 export type DagAgentResult = {
@@ -20,6 +21,7 @@ export type DagAgentOptions = ReasonStateOptions & {
   useX?: boolean;
   xQuery?: string;
   injectContradiction?: boolean;
+  rollbackNodeId?: string;
 };
 
 function clone<T>(obj: T): T {
@@ -131,6 +133,7 @@ export async function runDagAgent(
   let planPatches: Patch[] | undefined;
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
   let planMessages: string[] | undefined;
+  let agentNote: string | undefined;
   const hasBlockersNow = () =>
     (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
 
@@ -153,17 +156,25 @@ export async function runDagAgent(
 
   await runPlanTurn(
     "Plan turn 1",
-    `Create a concise plan for: ${goal}, budget ${budget}. Replace /summary/agent-note with <=200 char next step (summaries only).`
+    `Create a concise plan for: ${goal}, budget ${budget}. Consider existing booking summaries; avoid overlapping dates with blocked/resolved bookings. If clashes exist, ask for new dates. Replace /summary/agent-note with <=200 char next step (summaries only).`
   );
+
+  // Optional rollback of a subtree before re-planning
+  if (options.rollbackNodeId) {
+    const rollbackPatches = buildRollbackPatches(engine.snapshot, options.rollbackNodeId);
+    if (rollbackPatches.length > 0) {
+      await applyStep(rollbackPatches, `Rollback subtree ${options.rollbackNodeId}`);
+    }
+  }
 
   if (!planPatches || hasBlockersNow()) {
     await runPlanTurn(
       "Plan turn 2 (resolve blockers)",
-      `Resolve blockers/unknowns and refine plan for: ${goal}, budget ${budget}. Replace /summary/agent-note with <=200 char next step (summaries only).`
+      `Resolve blockers/unknowns and refine plan for: ${goal}, budget ${budget}. Avoid overlapping dates with existing bookings; if clash, ask for new dates. Replace /summary/agent-note with <=200 char next step (summaries only).`
     );
   }
 
-  // Resolve date unknowns if dates provided
+  // Resolve date unknowns if dates provided (auto-remediate)
   if (options.bookingDates?.startDate && options.bookingDates?.endDate) {
     const resolveUnknowns: Patch[] = [];
     (engine.snapshot.unknowns ?? [])
@@ -186,6 +197,26 @@ export async function runDagAgent(
     if (resolveUnknowns.length > 0) {
       await applyStep(resolveUnknowns, "Resolve missing dates");
     }
+  }
+
+  // If dates are missing, short-circuit booking and prompt
+  if (!options.bookingDates?.startDate || !options.bookingDates?.endDate) {
+    const notePatch: Patch = {
+      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+      path: "/summary/agent-note",
+      value: "Need start/end dates to proceed with booking."
+    };
+    await applyStep([notePatch], "Booking skipped (dates missing)");
+    return {
+      history,
+      events,
+      plan: planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n"),
+      planPatches,
+      planMeta,
+      planMetaHistory,
+      checkpoints,
+      agentMessage: "Need start/end dates to proceed with booking."
+    };
   }
 
   // Book (reuse existing booking node when same destination/budget)
@@ -212,8 +243,27 @@ export async function runDagAgent(
     const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
     await applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
 
+    // If blocked by clash, keep node clean and surface actionable note
+    if (bookingBlocked && (bookingPatches[0]?.value as any)?.details?.conflict) {
+      const clashMessage = `Booking blocked: dates clash (${(bookingPatches[0]?.value as any)?.details?.conflict?.startDate}–${(bookingPatches[0]?.value as any)?.details?.conflict?.endDate}). Try new dates.`;
+      agentNote = clashMessage;
+      const clashPatch: Patch = {
+        op: "replace",
+        path: `/raw/${bookingId}`,
+        value: { ...(bookingPatches[0]?.value as any), dirty: false }
+      };
+      await applyStep([clashPatch], "Mark clash clean");
+      const notePatch: Patch = {
+        op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+        path: "/summary/agent-note",
+        value: clashMessage
+      };
+      await applyStep([notePatch], "Update agent note (clash)");
+    }
+
     // Refresh agent note on success to avoid stale guidance
     if (!bookingBlocked) {
+      agentNote = (bookingPatches[0]?.value as any)?.summary ?? `Booked for ${goal} within budget ${budget}.`;
       const notePatch: Patch = {
         op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
         path: "/summary/agent-note",
@@ -222,6 +272,37 @@ export async function runDagAgent(
           `Booked for ${goal} within budget ${budget}.`
       };
       await applyStep([notePatch], "Refresh agent note");
+
+      // Supersede older blocked bookings for the same destination so they no longer count as blockers
+      const supersedePatches: Patch[] = [];
+      Object.entries(engine.snapshot.raw ?? {}).forEach(([id, node]) => {
+        if (id === bookingId) return;
+        if (!id.startsWith("booking-")) return;
+        const destination = (node as any)?.details?.destination;
+        if (destination !== goal) return;
+        if ((node as any)?.status !== "blocked") return;
+        supersedePatches.push({
+          op: "replace",
+          path: `/raw/${id}`,
+          value: {
+            ...(node as any),
+            status: "resolved",
+            summary: `Superseded by ${bookingId}`,
+            dirty: false,
+            updatedAt: new Date().toISOString()
+          }
+        });
+        if (engine.snapshot.summary?.[id]) {
+          supersedePatches.push({
+            op: "replace",
+            path: `/summary/${id}`,
+            value: `Booking ${id} superseded by ${bookingId}`
+          });
+        }
+      });
+      if (supersedePatches.length > 0) {
+        await applyStep(supersedePatches, "Supersede old bookings");
+      }
     }
   }
 
@@ -269,7 +350,6 @@ export async function runDagAgent(
   // Agent message from agent-note or booking status
   const agentMessage =
     engine.snapshot.summary?.["agent-note"] ??
-    (bookingPatches[0]?.value as any)?.summary ??
     planMessages?.join(" | ") ??
     "";
 
@@ -283,7 +363,7 @@ export async function runDagAgent(
     planMeta,
     planMetaHistory,
     checkpoints,
-    agentMessage
+    agentMessage: agentNote ?? agentMessage
   };
 }
 

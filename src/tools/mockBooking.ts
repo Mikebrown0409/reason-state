@@ -45,7 +45,8 @@ function fakeStripePayment(
 
 // Real-ish demo booking: governance gate, calendar clash, stripe-test simulation.
 export async function mockBooking(input: BookingInput): Promise<Patch[]> {
-  const bookingId = `booking-${input.id ?? Date.now()}`;
+  const bookingId =
+    input.id && input.id.startsWith("booking-") ? input.id : `booking-${input.id ?? Date.now()}`;
 
   if (input.unknowns && input.unknowns.length > 0) {
     return [
@@ -61,6 +62,11 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           sourceType: "booking",
           sourceId: bookingId
         }
+      },
+      {
+        op: "add",
+        path: `/summary/${bookingId}`,
+        value: `Booking ${bookingId}: blocked (unknowns=${input.unknowns.join(",")})`
       }
     ];
   }
@@ -79,6 +85,11 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           sourceType: "booking",
           sourceId: bookingId
         }
+      },
+      {
+        op: "add",
+        path: `/summary/${bookingId}`,
+        value: `Booking ${bookingId}: blocked (missing destination/budget)`
       }
     ];
   }
@@ -114,6 +125,16 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           sourceId: bookingId,
           dependsOn: [unknownId]
         }
+      },
+      {
+        op: "add",
+        path: `/summary/${bookingId}`,
+        value: `Booking ${bookingId}: blocked (missing dates)`
+      },
+      {
+        op: "add",
+        path: `/summary/${unknownId}`,
+        value: `Unknown ${unknownId}: travel dates missing`
       }
     ];
   }
@@ -141,6 +162,11 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           sourceType: "booking",
           sourceId: bookingId
         }
+      },
+      {
+        op: "add",
+        path: `/summary/${bookingId}`,
+        value: `Booking ${bookingId}: blocked (clash ${clash.startDate}–${clash.endDate} for ${clash.destination ?? "unknown"})`
       }
     ];
   }

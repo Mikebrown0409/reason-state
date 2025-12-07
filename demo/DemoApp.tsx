@@ -41,18 +41,29 @@ export function DemoApp() {
   const [agentMode, setAgentMode] = useState<"simple" | "dag">("simple");
   const [replayStatus, setReplayStatus] = useState<string>("");
   const [tokenSavings, setTokenSavings] = useState<string>("");
+  const [rollbackTarget, setRollbackTarget] = useState<string>("");
+  const [diffBefore, setDiffBefore] = useState<Record<string, any> | null>(null);
+  const [diffAfter, setDiffAfter] = useState<Record<string, any> | null>(null);
+  const [lastRecomputedId, setLastRecomputedId] = useState<string>("");
+  const [changedNodes, setChangedNodes] = useState<string[]>([]);
+  const [replayInfo, setReplayInfo] = useState<{ patches: number; rawMatch: boolean; summaryMatch: boolean }>();
 
-  const runLive = () => {
+  const runLive = (rollbackId?: string) => {
     const q = query;
     const b = budget;
     const injected = factInput ? [{ summary: factInput }] : [];
+    const snapshotBefore = current?.state ? JSON.parse(JSON.stringify(current.state.raw)) : null;
     const runner =
       agentMode === "dag"
         ? runDagAgent(
             q,
             b,
             injected,
-            { bookingDates: startDate && endDate ? { startDate, endDate } : undefined, useX: false },
+            {
+              bookingDates: startDate && endDate ? { startDate, endDate } : undefined,
+              useX: false,
+              rollbackNodeId: rollbackId
+            },
             current?.state
           )
         : runDemoAgent(
@@ -108,6 +119,22 @@ export function DemoApp() {
         setRegeneratedIds([]);
         setTokenSavings("");
       }
+      if (snapshotBefore) {
+        setDiffBefore(snapshotBefore);
+      }
+      const latestRaw = res.history[res.history.length - 1]?.state.raw;
+      if (latestRaw) {
+        const afterClone = JSON.parse(JSON.stringify(latestRaw));
+        setDiffAfter(afterClone);
+        if (snapshotBefore) {
+          const keys = new Set([...Object.keys(snapshotBefore ?? {}), ...Object.keys(afterClone ?? {})]);
+          const changed = Array.from(keys).filter((k) => JSON.stringify(snapshotBefore?.[k]) !== JSON.stringify(afterClone?.[k]));
+          setChangedNodes(changed);
+        } else {
+          setChangedNodes([]);
+        }
+      }
+      if (rollbackId) setLastRecomputedId(rollbackId);
     });
   };
 
@@ -139,8 +166,14 @@ export function DemoApp() {
     const engine = new ReasonState();
     engine.applyPatches(current.state.history ?? []);
     const match = JSON.stringify(engine.snapshot.raw) === JSON.stringify(current.state.raw);
-    setReplayResult(match ? "Determinism check: OK" : "Determinism check: MISMATCH");
-    setReplayStatus(match ? "Replay OK" : "Replay mismatch");
+    const summaryMatch = JSON.stringify(engine.snapshot.summary) === JSON.stringify(current.state.summary);
+    setReplayResult(match && summaryMatch ? "Determinism check: OK (raw+summary match)" : "Determinism check: MISMATCH");
+    setReplayStatus(match && summaryMatch ? "Replay OK" : "Replay mismatch");
+    setReplayInfo({
+      patches: current.state.history?.length ?? 0,
+      rawMatch: match,
+      summaryMatch
+    });
   };
 
   const recentPatches = (current?.state.history ?? []).slice(-8).reverse();
@@ -288,6 +321,13 @@ export function DemoApp() {
               )}
             </div>
             {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
+            {replayInfo && (
+              <div style={{ fontSize: 12, marginTop: 4, color: "#334155" }}>
+                <div>Log length: {replayInfo.patches} patches</div>
+                <div>Raw match: {replayInfo.rawMatch ? "yes" : "no"}</div>
+                <div>Summary match: {replayInfo.summaryMatch ? "yes" : "no"}</div>
+              </div>
+            )}
         </div>
           </AssumptionCard>
       </div>
@@ -343,6 +383,59 @@ export function DemoApp() {
         {agentMessage && (
           <AssumptionCard title="Agent response" status="valid" subtitle="Model-guided next step">
             <div style={{ fontSize: 13, color: "#0f172a" }}>{agentMessage}</div>
+            {hasBlocked && (
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                <button
+                  style={{ padding: "4px 8px" }}
+                  onClick={() => {
+                    const blockedId =
+                      Object.values(current?.state.raw ?? {}).find((n) => n.type === "action" && n.status === "blocked")?.id ??
+                      rollbackTarget;
+                    runLive(agentMode === "dag" ? blockedId : undefined);
+                  }}
+                >
+                  Rollback & recompute subtree
+                </button>
+              </div>
+            )}
+          </AssumptionCard>
+        )}
+
+        {diffBefore && diffAfter && (
+          <AssumptionCard title="Subtree diff" status="valid" subtitle="Before → After (last run)">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>
+                  Before (raw){lastRecomputedId ? ` — subtree ${lastRecomputedId}` : ""}
+                </div>
+                <pre style={{ fontSize: 11, whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto", color: "#0f172a" }}>
+                  {JSON.stringify(diffBefore, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>
+                  After (raw){lastRecomputedId ? ` — subtree ${lastRecomputedId}` : ""}
+                </div>
+                <pre style={{ fontSize: 11, whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto", color: "#0f172a" }}>
+                  {JSON.stringify(diffAfter, null, 2)}
+                </pre>
+              </div>
+            </div>
+            {changedNodes.length > 0 && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#0f172a" }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>Changed nodes</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {changedNodes.map((id) => (
+                    <span
+                      key={id}
+                      style={{ padding: "2px 6px", borderRadius: 8, background: "#e0f2fe", border: "1px solid #bae6fd" }}
+                    >
+                      {id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </AssumptionCard>
         )}
 
@@ -455,6 +548,19 @@ export function DemoApp() {
                     {n.dependsOn.length > 0 && <div>depends: {n.dependsOn.join(", ")}</div>}
                     {n.temporalAfter.length > 0 && <div>after: {n.temporalAfter.join(", ")}</div>}
                     {n.temporalBefore.length > 0 && <div>before: {n.temporalBefore.join(", ")}</div>}
+                  </div>
+                )}
+                {agentMode === "dag" && (
+                  <div style={{ marginTop: 4 }}>
+                    <button
+                      style={{ fontSize: 11, padding: "2px 6px", borderRadius: 8, border: "1px solid #e2e8f0" }}
+                      onClick={() => {
+                        setRollbackTarget(n.id);
+                        runLive(n.id);
+                      }}
+                    >
+                      Rollback & recompute
+                    </button>
                   </div>
                 )}
               </div>

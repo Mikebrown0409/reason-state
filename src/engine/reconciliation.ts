@@ -1,4 +1,4 @@
-import type { EchoState, NodeType, StateNode } from "./types.js";
+import type { EchoState, NodeType, StateNode, Patch } from "./types.js";
 
 export function propagateDirty(state: EchoState, nodeIds: string[]): EchoState {
   const queue = [...nodeIds];
@@ -79,6 +79,11 @@ export function applyReconciliation(state: EchoState): EchoState {
   for (const node of Object.values(state.raw)) {
     if (node.dirty) {
       node.summary = node.summary ?? stringifyDetails(node);
+    }
+    // If an action is blocked due to an explicit conflict, keep it clean so it doesn't gate future runs.
+    const details = node.details as Record<string, unknown> | undefined;
+    if (node.type === "action" && node.status === "blocked" && details?.conflict) {
+      node.dirty = false;
     }
   }
 
@@ -199,6 +204,48 @@ function getTime(n?: StateNode): number | undefined {
 
 function collectDeps(node: StateNode): string[] {
   return [...(node.dependsOn ?? []), ...(node.temporalAfter ?? []), ...(node.temporalBefore ?? [])];
+}
+
+export function collectDependents(state: EchoState, id: string): string[] {
+  const dependents = new Set<string>();
+  const queue = [id];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    for (const node of Object.values(state.raw)) {
+      if (!node) continue;
+      const deps = collectDeps(node);
+      if (deps.includes(current)) {
+        if (!dependents.has(node.id)) {
+          dependents.add(node.id);
+          queue.push(node.id);
+        }
+      }
+    }
+  }
+  return Array.from(dependents);
+}
+
+export function buildRollbackPatches(state: EchoState, id: string): Patch[] {
+  const targets = new Set<string>([id, ...collectDependents(state, id)]);
+  const patches: Patch[] = [];
+  for (const tid of targets) {
+    const node = state.raw[tid];
+    if (!node) continue;
+    patches.push({
+      op: "replace",
+      path: `/raw/${tid}`,
+      value: {
+        ...node,
+        status: "blocked",
+        dirty: true,
+        summary: node.summary ?? "Rollback pending"
+      }
+    });
+  }
+  return patches;
 }
 
 function depSatisfied(state: EchoState, node: StateNode, dep: string): boolean {

@@ -146,7 +146,7 @@ export async function runSimpleAgent(
 
   await runPlanTurn(
     "Plan turn 1",
-    `Create a concise plan for: ${query}, budget ${budget}. Also replace /summary/agent-note with a <=200 char next-step message (summaries only; no details).`
+    `Create a concise plan for: ${query}, budget ${budget}. Consider existing booking summaries; do not overlap dates with blocked/resolved bookings. If clashes exist, ask for new dates. Replace /summary/agent-note with a <=200 char next-step message (summaries only; no details).`
   );
 
   // If governance blockers remain (unknowns/dirty) or no patches, attempt a second turn focused on blockers
@@ -154,11 +154,11 @@ export async function runSimpleAgent(
   if (!planPatches || hasBlockers) {
     await runPlanTurn(
       "Plan turn 2 (resolve blockers)",
-      `Resolve blockers/unknowns and refine plan for: ${query}, budget ${budget}. Prioritize clearing unknowns/dirty nodes. Also replace /summary/agent-note with a <=200 char next-step message (summaries only; no details).`
+      `Resolve blockers/unknowns and refine plan for: ${query}, budget ${budget}. Prioritize clearing unknowns/dirty nodes and avoid date clashes with existing bookings. Replace /summary/agent-note with a <=200 char next-step message (summaries only; no details).`
     );
   }
 
-  // Resolve date-related unknowns if user provided dates
+  // Resolve date-related unknowns if user provided dates (auto-remediate)
   if (options.bookingDates?.startDate && options.bookingDates?.endDate) {
     const resolveUnknowns: Patch[] = [];
     (engine.snapshot.unknowns ?? [])
@@ -183,6 +183,26 @@ export async function runSimpleAgent(
     }
   }
 
+  // If dates are missing, short-circuit booking and prompt
+  if (!options.bookingDates?.startDate || !options.bookingDates?.endDate) {
+    const notePatch: Patch = {
+      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+      path: "/summary/agent-note",
+      value: "Need start/end dates to proceed with booking."
+    };
+    applyStep([notePatch], "Booking skipped (dates missing)");
+    return {
+      history,
+      events,
+      plan: planSummaries.join("\n---\n"),
+      planPatches,
+      planMeta,
+      planMetaHistory,
+      planMessages,
+      agentMessage: "Need start/end dates to proceed with booking."
+    };
+  }
+
   // Identify existing booking to reuse/replace
   const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
   const reuseExisting =
@@ -193,17 +213,43 @@ export async function runSimpleAgent(
 
   // Booking (governed)
   if (!engine.canExecute("action")) {
-    events.push("Booking skipped: blocked by governance (unknown/dirty)");
-    return {
-      history,
-      events,
-      plan: planSummaries.join("\n---\n"),
-      planPatches,
-      planMeta,
-      planMetaHistory,
-      planMessages,
-      agentMessage: agentNote && agentNote !== "Agent note: pending" ? agentNote : ""
-    };
+    // As a fallback, try to auto-resolve dates if provided
+    if (options.bookingDates?.startDate && options.bookingDates?.endDate) {
+      const resolveUnknowns: Patch[] = [];
+      (engine.snapshot.unknowns ?? [])
+        .filter((id) => id.startsWith("unknown-dates-"))
+        .forEach((id) => {
+          const node = engine.snapshot.raw[id];
+          if (!node) return;
+          resolveUnknowns.push({
+            op: "replace",
+            path: `/raw/${id}`,
+            value: {
+              ...node,
+              status: "resolved",
+              summary: "Travel dates provided",
+              details: { ...(node.details as any), resolvedAt: new Date().toISOString() },
+              dirty: false
+            }
+          });
+        });
+      if (resolveUnknowns.length > 0) {
+        applyStep(resolveUnknowns, "Resolve missing dates");
+      }
+    }
+    if (!engine.canExecute("action")) {
+      events.push("Booking skipped: blocked by governance (unknown/dirty)");
+      return {
+        history,
+        events,
+        plan: planSummaries.join("\n---\n"),
+        planPatches,
+        planMeta,
+        planMetaHistory,
+        planMessages,
+        agentMessage: agentNote && agentNote !== "Agent note: pending" ? agentNote : ""
+      };
+    }
   }
   const bookingPatches = await mockBooking({
     id: bookingId,
@@ -233,14 +279,63 @@ export async function runSimpleAgent(
     : "";
   const agentMessage = agentNote || agentMessageFromBooking;
 
+  // If blocked by clash, keep node clean and surface actionable note
+  if (bookingBlocked && bookingNode?.details?.conflict) {
+    agentNote = agentMessageFromBooking;
+    const clashPatch: Patch = {
+      op: "replace",
+      path: `/raw/${bookingId}`,
+      value: { ...(bookingNode as any), dirty: false }
+    };
+    applyStep([clashPatch], "Mark clash clean");
+    const notePatch: Patch = {
+      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+      path: "/summary/agent-note",
+      value: agentMessageFromBooking
+    };
+    applyStep([notePatch], "Update agent note (clash)");
+  }
+
   // Refresh agent-note on booking success to avoid stale guidance.
   if (!bookingBlocked) {
+    agentNote = agentMessageFromBooking;
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
       value: agentMessageFromBooking || "Booking resolved."
     };
     applyStep([notePatch], "Refresh agent note");
+
+    // Supersede older blocked bookings for the same destination so they no longer count as blockers
+    const supersedePatches: Patch[] = [];
+    Object.entries(engine.snapshot.raw ?? {}).forEach(([id, node]) => {
+      if (id === bookingId) return;
+      if (!id.startsWith("booking-")) return;
+      const destination = (node as any)?.details?.destination;
+      if (destination !== query) return;
+      if ((node as any)?.status !== "blocked") return;
+      supersedePatches.push({
+        op: "replace",
+        path: `/raw/${id}`,
+        value: {
+          ...(node as any),
+          status: "resolved",
+          summary: `Superseded by ${bookingId}`,
+          dirty: false,
+          updatedAt: new Date().toISOString()
+        }
+      });
+      if (engine.snapshot.summary?.[id]) {
+        supersedePatches.push({
+          op: "replace",
+          path: `/summary/${id}`,
+          value: `Booking ${id} superseded by ${bookingId}`
+        });
+      }
+    });
+    if (supersedePatches.length > 0) {
+      applyStep(supersedePatches, "Supersede old bookings");
+    }
   }
 
   const planSummary = planSummaries.join("\n---\n");
