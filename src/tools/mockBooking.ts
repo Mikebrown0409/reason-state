@@ -83,6 +83,41 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
     ];
   }
 
+  // Guard: missing dates → emit unknown + blocked booking
+  const missingDates = !input.startDate || !input.endDate;
+  if (missingDates) {
+    const unknownId = `unknown-dates-${bookingId}`;
+    return [
+      {
+        op: "add",
+        path: `/raw/${unknownId}`,
+        value: {
+          id: unknownId,
+          type: "unknown",
+          status: "open",
+          summary: "Travel dates missing; provide start/end",
+          details: { reason: "dates_missing", required: true },
+          sourceType: "booking",
+          sourceId: bookingId
+        }
+      },
+      {
+        op: "add",
+        path: `/raw/${bookingId}`,
+        value: {
+          id: bookingId,
+          type: "action",
+          status: "blocked",
+          summary: "Booking blocked: dates missing",
+          details: { destination: input.destination, budget: input.budget, missing: ["startDate", "endDate"] },
+          sourceType: "booking",
+          sourceId: bookingId,
+          dependsOn: [unknownId]
+        }
+      }
+    ];
+  }
+
   const clash = calendarHolds.find((hold) =>
     overlaps(input.startDate, input.endDate, hold.startDate, hold.endDate)
   );
