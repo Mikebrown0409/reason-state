@@ -3,7 +3,7 @@ import { Timeline } from "../src/ui/Timeline.js";
 import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
-import { runXAgent as runDemoAgent } from "../examples/agents/xAgent.js";
+import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
 import confetti from "canvas-confetti";
 
 type HistoryEntry = { state: EchoState; label: string; idx: number };
