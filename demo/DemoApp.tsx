@@ -43,9 +43,22 @@ export function DemoApp() {
   const [patchLog, setPatchLog] = useState<Patch[]>([]);
   const [blockedBookings, setBlockedBookings] = useState(0);
   const [resolvedBookings, setResolvedBookings] = useState(0);
+  const scriptedSteps: Array<{ label: string; query: string; budget: number; startDate: string; endDate: string }> = [
+    { label: "Turn 1: Tokyo (clash)", query: "Tokyo", budget: 4000, startDate: "2025-12-20", endDate: "2025-12-23" },
+    { label: "Turn 2: Adjust", query: "Tokyo", budget: 4000, startDate: "2025-12-20", endDate: "2025-12-23" },
+    { label: "Turn 3: Amsterdam (resolved)", query: "Amsterdam", budget: 4500, startDate: "2026-01-10", endDate: "2026-01-15" }
+  ];
 
-  const runLive = () => {
-    runDemoAgent(query, budget, factInput ? [{ summary: factInput }] : []).then((res) => {
+  const runLive = (opts?: { scriptedIndex?: number }) => {
+    const scripted = opts?.scriptedIndex !== undefined ? scriptedSteps[opts.scriptedIndex] : undefined;
+    const q = scripted?.query ?? query;
+    const b = scripted?.budget ?? budget;
+    const injected = factInput ? [{ summary: factInput }] : [];
+    runDemoAgent(q, b, injected, {
+      bookingDates: scripted
+        ? { startDate: scripted.startDate, endDate: scripted.endDate }
+        : undefined
+    }).then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
       setIdx(withIdx.length - 1);
@@ -143,6 +156,12 @@ export function DemoApp() {
           style={{ padding: "6px 12px" }}
         >
           New turn
+        </button>
+        <button onClick={() => runLive({ scriptedIndex: 0 })} style={{ padding: "6px 12px" }}>
+          Script: Turn 1 (Tokyo clash)
+        </button>
+        <button onClick={() => runLive({ scriptedIndex: 2 })} style={{ padding: "6px 12px" }}>
+          Script: Turn 3 (Amsterdam resolved)
         </button>
       </div>
 
