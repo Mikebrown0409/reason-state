@@ -40,6 +40,8 @@ export function DemoApp() {
   const [timeline, setTimeline] = useState<string[]>([]);
   const [reusedCount, setReusedCount] = useState(0);
   const [regeneratedCount, setRegeneratedCount] = useState(0);
+  const [reusedIds, setReusedIds] = useState<string[]>([]);
+  const [regeneratedIds, setRegeneratedIds] = useState<string[]>([]);
   const [patchLog, setPatchLog] = useState<Patch[]>([]);
   const [blockedBookings, setBlockedBookings] = useState(0);
   const [resolvedBookings, setResolvedBookings] = useState(0);
@@ -78,14 +80,23 @@ export function DemoApp() {
         const lastIds = new Set(Object.keys(last.raw));
         const prevIds = new Set(Object.keys(prevState.raw));
         let reused = 0;
+        const reusedList: string[] = [];
         lastIds.forEach((id) => {
-          if (prevIds.has(id) && JSON.stringify(last.raw[id]) === JSON.stringify(prevState.raw[id])) reused++;
+          if (prevIds.has(id) && JSON.stringify(last.raw[id]) === JSON.stringify(prevState.raw[id])) {
+            reused++;
+            reusedList.push(id);
+          }
         });
         setReusedCount(reused);
         setRegeneratedCount(lastIds.size - reused);
+        const regeneratedList = Array.from(lastIds).filter((id) => !reusedList.includes(id));
+        setReusedIds(reusedList);
+        setRegeneratedIds(regeneratedList);
       } else {
         setReusedCount(0);
         setRegeneratedCount(0);
+        setReusedIds([]);
+        setRegeneratedIds([]);
       }
     });
   };
@@ -125,10 +136,25 @@ export function DemoApp() {
   const contextSnapshot = Object.entries(current?.state.summary ?? {})
     .map(([id, summary]) => `- ${id}: ${summary}`)
     .join("\n");
+  const hasBlocked = blockedBookings > 0 || unknowns.length > 0 || dirtyNodes.length > 0;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", fontFamily: "Inter, sans-serif", padding: 16 }}>
-      <h1>reason-state time machine</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h1 style={{ margin: 0 }}>reason-state time machine</h1>
+        <span
+          style={{
+            padding: "4px 10px",
+            borderRadius: 999,
+            background: hasBlocked ? "#fee2e2" : "#dcfce7",
+            color: hasBlocked ? "#b91c1c" : "#166534",
+            fontSize: 12,
+            border: "1px solid #e5e7eb"
+          }}
+        >
+          {hasBlocked ? "Blocked" : "Clean"}
+        </span>
+      </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center" }}>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Query" style={{ padding: 6, flex: 1 }} />
@@ -349,6 +375,19 @@ export function DemoApp() {
 
       <AssumptionCard title="What the model saw" status="valid" subtitle="Summaries-only context snapshot">
         <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", color: "#0f172a" }}>{contextSnapshot || "No summaries"}</pre>
+      </AssumptionCard>
+
+      <AssumptionCard title="Reuse vs regenerated" status="valid" subtitle="Per-turn reuse">
+        <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#0f172a" }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>Reused</div>
+            {reusedIds.length === 0 ? <div>None</div> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{reusedIds.map((id) => <span key={id} style={{ padding: "2px 6px", borderRadius: 8, background: "#dcfce7", border: "1px solid #bbf7d0" }}>{id}</span>)}</div>}
+          </div>
+          <div>
+            <div style={{ fontWeight: 600 }}>Regenerated</div>
+            {regeneratedIds.length === 0 ? <div>None</div> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{regeneratedIds.map((id) => <span key={id} style={{ padding: "2px 6px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe" }}>{id}</span>)}</div>}
+          </div>
+        </div>
       </AssumptionCard>
 
       <AssumptionCard title="Diff (previous → current)" status="valid" subtitle="Changed nodes on last step">
