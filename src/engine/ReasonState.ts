@@ -55,7 +55,6 @@ function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown
     }
   }
 }
-import { randomUUID as nodeRandomUUID } from "crypto";
 import { applyReconciliation, canExecute, detectContradictions, propagateDirty } from "./reconciliation.js";
 import { appendToLogSync, loadCheckpoint, readLog, saveCheckpoint } from "./storage.js";
 import type {
@@ -251,11 +250,9 @@ function extractNodeId(path: string): string | null {
 }
 
 function generateId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  if (typeof nodeRandomUUID === "function") {
-    return nodeRandomUUID();
+  const gcrypto = typeof globalThis !== "undefined" ? (globalThis as any).crypto : undefined;
+  if (gcrypto && typeof gcrypto.randomUUID === "function") {
+    return gcrypto.randomUUID();
   }
   return `rs-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
