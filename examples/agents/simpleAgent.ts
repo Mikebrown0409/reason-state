@@ -23,7 +23,8 @@ function clone<T>(obj: T): T {
 export async function runSimpleAgent(
   query: string,
   budget: number,
-  options: ReasonStateOptions = {}
+  injectedFacts?: Array<{ summary: string }>,
+  options: ReasonStateOptions & { bookingDates?: { startDate: string; endDate: string } } = {}
 ): Promise<SimpleAgentResult> {
   const engine = new ReasonState(options);
   const events: string[] = [];
@@ -50,6 +51,7 @@ export async function runSimpleAgent(
         }
       },
       { op: "add", path: "/summary/goal", value: `Goal: ${query}` },
+      { op: "add", path: "/summary/budget", value: `Budget: ${budget}` },
       {
         op: "add",
         path: "/raw/budget",
@@ -58,6 +60,27 @@ export async function runSimpleAgent(
     ],
     `Seed goal (${budget.toLocaleString()} budget)`
   );
+
+  if (injectedFacts && injectedFacts.length > 0) {
+    const factPatches = injectedFacts.flatMap((f, i) => [
+      {
+        op: "add",
+        path: `/raw/input-${i}`,
+        value: {
+          id: `input-${i}`,
+          type: "assumption",
+          summary: f.summary,
+          details: { provided: true },
+          assumptionStatus: "valid",
+          status: "open",
+          sourceType: "user",
+          sourceId: `input-${i}`
+        }
+      },
+      { op: "add", path: `/summary/input-${i}`, value: `User input: ${f.summary}` }
+    ]);
+    applyStep(factPatches, "Injected facts");
+  }
 
   // Grok plan with deterministic context (multi-turn governance-aware)
   const planSummaries: string[] = [];
@@ -98,8 +121,8 @@ export async function runSimpleAgent(
     destination: query,
     budget,
     unknowns: engine.snapshot.unknowns,
-    startDate: "2025-12-20",
-    endDate: "2025-12-23"
+    startDate: options.bookingDates?.startDate ?? "2025-12-20",
+    endDate: options.bookingDates?.endDate ?? "2025-12-23"
   });
   applyStep(
     bookingPatches,

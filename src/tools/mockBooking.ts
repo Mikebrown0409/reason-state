@@ -10,10 +10,20 @@ type BookingInput = {
   unknowns?: string[];
 };
 
-const calendarHolds: Array<{ startDate: string; endDate: string; destination?: string }> = [
-  { startDate: "2025-12-20", endDate: "2025-12-23", destination: "Tokyo" },
-  { startDate: "2025-12-24", endDate: "2025-12-27", destination: "Amsterdam" }
-];
+let calendarHolds: Array<{ startDate: string; endDate: string; destination?: string }> = [];
+
+function seedCalendar() {
+  calendarHolds = [
+    { startDate: "2025-12-20", endDate: "2025-12-23", destination: "Tokyo" },
+    { startDate: "2025-12-24", endDate: "2025-12-27", destination: "Amsterdam" }
+  ];
+}
+
+seedCalendar();
+
+export function resetCalendarHolds(): void {
+  seedCalendar();
+}
 
 function overlaps(aStart?: string, aEnd?: string, bStart?: string, bEnd?: string): boolean {
   if (!aStart || !aEnd || !bStart || !bEnd) return false;

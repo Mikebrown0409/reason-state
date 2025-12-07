@@ -4,28 +4,15 @@ import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
 import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
+import { resetCalendarHolds } from "../src/tools/mockBooking.js";
 import confetti from "canvas-confetti";
 
 type HistoryEntry = { state: EchoState; label: string; idx: number };
-
-function diffNodes(prev?: EchoState, curr?: EchoState): string[] {
-  if (!prev || !curr) return [];
-  const changed: string[] = [];
-  const ids = new Set([...Object.keys(prev.raw), ...Object.keys(curr.raw)]);
-  ids.forEach((id) => {
-    const a = prev.raw[id];
-    const b = curr.raw[id];
-    if (JSON.stringify(a) !== JSON.stringify(b)) changed.push(id);
-  });
-  return changed;
-}
 
 export function DemoApp() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [idx, setIdx] = useState(0);
   const current = history[idx] ?? history[history.length - 1];
-  const prev = history[idx - 1];
-  const changed = diffNodes(prev?.state, current?.state);
   const [plan, setPlan] = useState<string>("");
   const [planMeta, setPlanMeta] = useState<{ attempts?: number; lastError?: string; raw?: string }>();
   const [planMetaHistory, setPlanMetaHistory] = useState<Array<{ attempts?: number; lastError?: string; raw?: string; label?: string }>>(
@@ -35,7 +22,6 @@ export function DemoApp() {
   const [query, setQuery] = useState("Tokyo");
   const [budget, setBudget] = useState(4000);
   const [replayResult, setReplayResult] = useState<string>("");
-  const [turn, setTurn] = useState(1);
   const [factInput, setFactInput] = useState("");
   const [timeline, setTimeline] = useState<string[]>([]);
   const [reusedCount, setReusedCount] = useState(0);
@@ -45,10 +31,12 @@ export function DemoApp() {
   const [patchLog, setPatchLog] = useState<Patch[]>([]);
   const [blockedBookings, setBlockedBookings] = useState(0);
   const [resolvedBookings, setResolvedBookings] = useState(0);
+  const [showPatchLog, setShowPatchLog] = useState(false);
+  const [showModelContext, setShowModelContext] = useState(false);
   const scriptedSteps: Array<{ label: string; query: string; budget: number; startDate: string; endDate: string }> = [
     { label: "Turn 1: Tokyo (clash)", query: "Tokyo", budget: 4000, startDate: "2025-12-20", endDate: "2025-12-23" },
     { label: "Turn 2: Adjust", query: "Tokyo", budget: 4000, startDate: "2025-12-20", endDate: "2025-12-23" },
-    { label: "Turn 3: Amsterdam (resolved)", query: "Amsterdam", budget: 4500, startDate: "2026-01-10", endDate: "2026-01-15" }
+    { label: "Turn 3: Amsterdam (resolved)", query: "Amsterdam", budget: 4500, startDate: "2026-02-10", endDate: "2026-02-15" }
   ];
 
   const runLive = (opts?: { scriptedIndex?: number }) => {
@@ -68,7 +56,7 @@ export function DemoApp() {
       setPlanMeta(res.planMeta);
       setPlanMetaHistory(res.planMetaHistory ?? []);
       setEvents(res.events);
-      setTimeline((prev) => [...prev, `Turn ${turn}: ${res.events.join(" | ")}`]);
+      setTimeline((prev) => [...prev, `Turn ${res.history.length}: ${res.events.join(" | ")}`]);
       const allPatches = res.history.flatMap((h) => h.state.history ?? []);
       setPatchLog(allPatches);
       const bookings = Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter((n) => n.type === "action");
@@ -137,278 +125,283 @@ export function DemoApp() {
     .map(([id, summary]) => `- ${id}: ${summary}`)
     .join("\n");
   const hasBlocked = blockedBookings > 0 || unknowns.length > 0 || dirtyNodes.length > 0;
+  const nodeChips = Object.values(current?.state.raw ?? {}).map((n) => ({
+    id: n.id,
+    type: n.type,
+    status: n.status ?? "open",
+    dirty: Boolean(n.dirty),
+    dependsOn: n.dependsOn ?? [],
+    temporalAfter: (n as any).temporalAfter ?? [],
+    temporalBefore: (n as any).temporalBefore ?? []
+  }));
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", fontFamily: "Inter, sans-serif", padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h1 style={{ margin: 0 }}>reason-state time machine</h1>
-        <span
-          style={{
-            padding: "4px 10px",
-            borderRadius: 999,
-            background: hasBlocked ? "#fee2e2" : "#dcfce7",
-            color: hasBlocked ? "#b91c1c" : "#166534",
-            fontSize: 12,
-            border: "1px solid #e5e7eb"
-          }}
-        >
-          {hasBlocked ? "Blocked" : "Clean"}
-        </span>
-      </div>
+    <div style={{ maxWidth: 1200, margin: "0 auto", fontFamily: "Inter, sans-serif", padding: 16, display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 12 }}>
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <h1 style={{ margin: 0 }}>reason-state time machine</h1>
+          <span
+            style={{
+              padding: "4px 10px",
+              borderRadius: 999,
+              background: hasBlocked ? "#fee2e2" : "#dcfce7",
+              color: hasBlocked ? "#b91c1c" : "#166534",
+              fontSize: 12,
+              border: "1px solid #e5e7eb"
+            }}
+          >
+            {hasBlocked ? "Blocked" : "Clean"}
+          </span>
+        </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center" }}>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Query" style={{ padding: 6, flex: 1 }} />
-        <input
-          type="number"
-          value={budget}
-          onChange={(e) => setBudget(Number(e.target.value))}
-          placeholder="Budget"
-          style={{ padding: 6, width: 120 }}
-        />
-        <input
-          value={factInput}
-          onChange={(e) => setFactInput(e.target.value)}
-          placeholder="Optional new fact / assumption"
-          style={{ padding: 6, flex: 1 }}
-        />
-        <button onClick={runLive} style={{ padding: "6px 12px" }}>
-          Run agent
-        </button>
-        <button
-          onClick={() => {
-            setTurn((t) => t + 1);
-            runLive();
-          }}
-          style={{ padding: "6px 12px" }}
-        >
-          New turn
-        </button>
-        <button onClick={() => runLive({ scriptedIndex: 0 })} style={{ padding: "6px 12px" }}>
-          Script: Turn 1 (Tokyo clash)
-        </button>
-        <button onClick={() => runLive({ scriptedIndex: 2 })} style={{ padding: "6px 12px" }}>
-          Script: Turn 3 (Amsterdam resolved)
-        </button>
-      </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Query" style={{ padding: 6, flex: 1, minWidth: 160 }} />
+          <input
+            type="number"
+            value={budget}
+            onChange={(e) => setBudget(Number(e.target.value))}
+            placeholder="Budget"
+            style={{ padding: 6, width: 120 }}
+          />
+          <input
+            value={factInput}
+            onChange={(e) => setFactInput(e.target.value)}
+            placeholder="Optional new fact / assumption"
+            style={{ padding: 6, flex: 1, minWidth: 160 }}
+          />
+          <button onClick={() => runLive()} style={{ padding: "6px 12px" }}>
+            Run
+          </button>
+          <button onClick={() => runLive({ scriptedIndex: 0 })} style={{ padding: "6px 12px" }}>
+            Script: Clash
+          </button>
+          <button onClick={() => runLive({ scriptedIndex: 2 })} style={{ padding: "6px 12px" }}>
+            Script: Resolve
+          </button>
+          <button
+            onClick={() => {
+              resetCalendarHolds();
+              setHistory([]);
+              setIdx(0);
+              setPlan("");
+              setPlanMeta(undefined);
+              setPlanMetaHistory([]);
+              setEvents([]);
+              setTimeline([]);
+              setReplayResult("");
+              setReusedCount(0);
+              setRegeneratedCount(0);
+              setPatchLog([]);
+              setBlockedBookings(0);
+              setResolvedBookings(0);
+              setReusedIds([]);
+              setRegeneratedIds([]);
+            }}
+            style={{ padding: "6px 12px" }}
+          >
+            Reset
+          </button>
+        </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-        <div style={{ flex: 1, background: "#f8fafc", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0" }}>
-          <div style={{ fontWeight: 600 }}>Metrics</div>
-          <div style={{ fontSize: 12, color: "#334155" }}>
-            <div>X posts used: {(current?.state.history ?? []).filter((p) => (p as any).value?.type === "assumption").length}</div>
-            <div>Grok plan length: {plan.length}</div>
-            <div>Blocked actions: {events.filter((e) => e.toLowerCase().includes("blocked")).length}</div>
-            <div>Self-heal events: {events.filter((e) => e.toLowerCase().includes("self-heal")).length}</div>
-            <div>Unknowns: {unknowns.length}</div>
-            <div>Dirty nodes: {dirtyNodes.length}</div>
-            <div>Reused nodes: {reusedCount}</div>
-            <div>Regenerated nodes: {regeneratedCount}</div>
-            <div>Bookings: {resolvedBookings} resolved / {blockedBookings} blocked</div>
-            {planMeta && (
-              <div>
-                Grok validation: attempts {planMeta.attempts ?? "?"}
-                {planMeta.lastError ? ` (last error: ${planMeta.lastError})` : ""}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+          <AssumptionCard title="Metrics" status="valid" subtitle="Run-level">
+            <div style={{ fontSize: 12, color: "#334155", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+              <div>Grok plan length: {plan.length}</div>
+              <div>Blocked actions: {events.filter((e) => e.toLowerCase().includes("blocked")).length}</div>
+              <div>Unknowns: {unknowns.length}</div>
+              <div>Dirty nodes: {dirtyNodes.length}</div>
+              <div>Reused nodes: {reusedCount}</div>
+              <div>Regenerated: {regeneratedCount}</div>
+              <div>Bookings: {resolvedBookings} resolved / {blockedBookings} blocked</div>
+              {planMeta && (
+                <div style={{ gridColumn: "span 2" }}>
+                  Grok validation: attempts {planMeta.attempts ?? "?"}
+                  {planMeta.lastError ? ` (last error: ${planMeta.lastError})` : ""}
+                </div>
+              )}
+            </div>
+          </AssumptionCard>
+          <AssumptionCard title="Governance" status="valid" subtitle="Blocked vs clean">
+            <div style={{ fontSize: 12, color: hasBlocked ? "#b91c1c" : "#0f172a" }}>
+              {hasBlocked ? (
+                <>
+                  {blockedBookings > 0 && <div>Booking blocked (clash)</div>}
+                  {unknowns.length > 0 && <div>Unknowns: {unknowns.join(", ")}</div>}
+                  {dirtyNodes.length > 0 && <div>Dirty: {dirtyNodes.map((n) => n.id).join(", ")}</div>}
+                </>
+              ) : (
+                <div>Clean: actions allowed</div>
+              )}
+              <button style={{ marginTop: 6, padding: "4px 8px" }} onClick={checkReplay}>
+                Check determinism
+              </button>
+              {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
+            </div>
+          </AssumptionCard>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+            Timeline step: {idx + 1} / {history.length}
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(history.length - 1, 0)}
+            value={idx}
+            onChange={(e) => setIdx(Number(e.target.value))}
+            style={{ width: "100%" }}
+          />
+          <Timeline items={timelineLabels} />
+        </div>
+
+        {plan && (
+          <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
+            <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
+            {planMetaHistory.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#334155" }}>
+                <div style={{ fontWeight: 600 }}>Validation/backoff</div>
+                <ul>
+                  {planMetaHistory.map((m, i) => (
+                    <li key={i}>
+                      {m.label ?? `Attempt ${i + 1}`}: attempts={m.attempts ?? "?"}
+                      {m.lastError ? ` lastError=${m.lastError}` : ""}{" "}
+                      {m.raw ? (
+                        <details>
+                          <summary>raw</summary>
+                          <pre style={{ whiteSpace: "pre-wrap" }}>{m.raw}</pre>
+                        </details>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
-          </div>
-        </div>
-        <div style={{ flex: 1, background: "#f8fafc", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0" }}>
-          <div style={{ fontWeight: 600 }}>Governance</div>
-          {unknowns.length > 0 || dirtyNodes.length > 0 ? (
-            <div style={{ fontSize: 12, color: "#b91c1c" }}>
-              {unknowns.length > 0 && <div>Blocked: unknowns present ({unknowns.join(", ")})</div>}
-              {dirtyNodes.length > 0 && <div>Dirty nodes: {dirtyNodes.map((n) => n.id).join(", ")}</div>}
-            </div>
+          </AssumptionCard>
+        )}
+
+        <AssumptionCard title="Assumptions" status="valid" subtitle="Click to retract and replay">
+          {assumptions.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#64748b" }}>No active assumptions</div>
           ) : (
-            <div style={{ fontSize: 12, color: "#0f172a" }}>Clean: actions allowed</div>
-          )}
-          <button style={{ marginTop: 6, padding: "4px 8px" }} onClick={checkReplay}>
-            Check determinism
-          </button>
-          {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
-          Timeline step: {idx + 1} / {history.length}
-        </label>
-        <input
-          type="range"
-          min={0}
-          max={Math.max(history.length - 1, 0)}
-          value={idx}
-          onChange={(e) => setIdx(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
-        <button style={{ marginTop: 6 }} onClick={() => setIdx(history.length - 1)}>
-          Jump to now
-        </button>
-        <button
-          style={{ marginTop: 6, marginLeft: 8 }}
-          onClick={() => {
-            setHistory([]);
-            setIdx(0);
-            setPlan("");
-            setPlanMeta(undefined);
-            setPlanMetaHistory([]);
-            setEvents([]);
-            setTimeline([]);
-            setReplayResult("");
-            setReusedCount(0);
-            setRegeneratedCount(0);
-            setPatchLog([]);
-            setBlockedBookings(0);
-            setResolvedBookings(0);
-          }}
-        >
-          Reset
-        </button>
-      </div>
-
-      <Timeline items={timelineLabels} />
-      {timeline.length > 0 && (
-        <AssumptionCard title="Turn log" status="valid" subtitle="Events per turn">
-          <ul style={{ fontSize: 12, color: "#334155" }}>
-            {timeline.map((t, i) => (
-              <li key={i}>{t}</li>
-            ))}
-          </ul>
-        </AssumptionCard>
-      )}
-
-      {plan && (
-        <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
-          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
-          {planMetaHistory.length > 0 && (
-            <div style={{ marginTop: 8, fontSize: 12, color: "#334155" }}>
-              <div style={{ fontWeight: 600 }}>Validation/backoff</div>
-              <ul>
-                {planMetaHistory.map((m, i) => (
-                  <li key={i}>
-                    {m.label ?? `Attempt ${i + 1}`}: attempts={m.attempts ?? "?"}
-                    {m.lastError ? ` lastError=${m.lastError}` : ""}{" "}
-                    {m.raw ? (
-                      <details>
-                        <summary>raw</summary>
-                        <pre style={{ whiteSpace: "pre-wrap" }}>{m.raw}</pre>
-                      </details>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {assumptions.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => handleAssumptionClick(a.id)}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 12,
+                    padding: "6px 10px",
+                    background: "#f8fafc",
+                    cursor: "pointer"
+                  }}
+                >
+                  {a.summary ?? a.id}
+                </button>
+              ))}
             </div>
           )}
         </AssumptionCard>
-      )}
 
-      <AssumptionCard title="Assumptions" status="valid" subtitle="Click to retract and replay">
-        {assumptions.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#64748b" }}>No active assumptions</div>
-        ) : (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {assumptions.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => handleAssumptionClick(a.id)}
-                style={{
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 12,
-                  padding: "6px 10px",
-                  background: "#f8fafc",
-                  cursor: "pointer"
-                }}
-              >
-                {a.summary ?? a.id}
-              </button>
-            ))}
-          </div>
-        )}
-      </AssumptionCard>
-
-      <AssumptionCard title="State" status="valid" subtitle="Current node summaries">
-        <ul style={{ fontSize: 12, color: "#334155" }}>
-          {Object.values(current?.state.raw ?? {}).map((n) => (
-            <li key={n.id}>
-              <strong>{n.id}</strong> [{n.type}] {n.status ?? ""} {n.dirty ? "(dirty)" : ""}{" "}
-              {n.assumptionStatus ? `[${n.assumptionStatus}]` : ""}{" "}
-              {n.sourceType ? `(source: ${n.sourceType}${n.sourceId ? `/${n.sourceId}` : ""})` : ""} {n.summary ? `— ${n.summary}` : ""}
-            </li>
-          ))}
-        </ul>
-      </AssumptionCard>
-
-      <AssumptionCard title="Event log (patches)" status="valid" subtitle="Recent patches applied">
-        {recentPatches.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
-        ) : (
-          <ul style={{ fontSize: 12, color: "#334155" }}>
-            {recentPatches.map((p, i) => (
-              <li key={`${p.path}-${i}`}>
-                {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
-                {(p as any).value?.sourceType ? `[src: ${(p as any).value.sourceType}${(p as any).value.sourceId ? `/${(p as any).value.sourceId}` : ""}]` : ""}
-              </li>
-            ))}
-          </ul>
-        )}
-      </AssumptionCard>
-
-      <AssumptionCard title="Patch log (all)" status="valid" subtitle="Append-only patches with source/timestamps">
-        {patchLog.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
-        ) : (
-          <ul style={{ fontSize: 12, color: "#334155", maxHeight: 200, overflow: "auto" }}>
-            {[...patchLog].reverse().map((p, i) => {
-              const val = (p as any).value as any;
-              return (
+        <AssumptionCard title="Recent patches" status="valid" subtitle="Last 8">
+          {recentPatches.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
+          ) : (
+            <ul style={{ fontSize: 12, color: "#334155" }}>
+              {recentPatches.map((p, i) => (
                 <li key={`${p.path}-${i}`}>
                   {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
-                  {val?.status ? `[status=${val.status}]` : ""}{" "}
-                  {val?.createdAt ? `[created=${val.createdAt}]` : ""} {val?.updatedAt ? `[updated=${val.updatedAt}]` : ""}{" "}
-                  {val?.sourceType ? `[src: ${val.sourceType}${val.sourceId ? `/${val.sourceId}` : ""}]` : ""}
+                  {(p as any).value?.sourceType ? `[src: ${(p as any).value.sourceType}${(p as any).value.sourceId ? `/${(p as any).value.sourceId}` : ""}]` : ""}
                 </li>
-              );
-            })}
-          </ul>
-        )}
-      </AssumptionCard>
+              ))}
+            </ul>
+          )}
+        </AssumptionCard>
 
-      <AssumptionCard title="What the model saw" status="valid" subtitle="Summaries-only context snapshot">
-        <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", color: "#0f172a" }}>{contextSnapshot || "No summaries"}</pre>
-      </AssumptionCard>
+        <AssumptionCard title="What the model saw" status="valid" subtitle="Summaries-only context snapshot">
+          <button style={{ fontSize: 12, marginBottom: 6 }} onClick={() => setShowModelContext((s) => !s)}>
+            {showModelContext ? "Hide" : "Show"} context
+          </button>
+          {showModelContext && <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", color: "#0f172a" }}>{contextSnapshot || "No summaries"}</pre>}
+        </AssumptionCard>
 
-      <AssumptionCard title="Reuse vs regenerated" status="valid" subtitle="Per-turn reuse">
-        <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#0f172a" }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>Reused</div>
-            {reusedIds.length === 0 ? <div>None</div> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{reusedIds.map((id) => <span key={id} style={{ padding: "2px 6px", borderRadius: 8, background: "#dcfce7", border: "1px solid #bbf7d0" }}>{id}</span>)}</div>}
+        <AssumptionCard title="Reuse vs regenerated" status="valid" subtitle="Per-turn reuse">
+          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#0f172a" }}>
+            <div>
+              <div style={{ fontWeight: 600 }}>Reused</div>
+              {reusedIds.length === 0 ? <div>None</div> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{reusedIds.map((id) => <span key={id} style={{ padding: "2px 6px", borderRadius: 8, background: "#dcfce7", border: "1px solid #bbf7d0" }}>{id}</span>)}</div>}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600 }}>Regenerated</div>
+              {regeneratedIds.length === 0 ? <div>None</div> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{regeneratedIds.map((id) => <span key={id} style={{ padding: "2px 6px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe" }}>{id}</span>)}</div>}
+            </div>
           </div>
-          <div>
-            <div style={{ fontWeight: 600 }}>Regenerated</div>
-            {regeneratedIds.length === 0 ? <div>None</div> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{regeneratedIds.map((id) => <span key={id} style={{ padding: "2px 6px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe" }}>{id}</span>)}</div>}
-          </div>
-        </div>
-      </AssumptionCard>
+        </AssumptionCard>
 
-      <AssumptionCard title="Diff (previous → current)" status="valid" subtitle="Changed nodes on last step">
-        {changed.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#64748b" }}>No changes</div>
-        ) : (
-          <ul style={{ fontSize: 12, color: "#334155" }}>
-            {changed.map((id) => {
-              const prevNode = prev?.state.raw[id];
-              const currNode = current?.state.raw[id];
-              return (
-                <li key={id}>
-                  <strong>{id}</strong>
-                  <div>Prev: {prevNode?.summary ?? JSON.stringify(prevNode)}</div>
-                  <div>Curr: {currNode?.summary ?? JSON.stringify(currNode)}</div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </AssumptionCard>
+        <AssumptionCard title="Patch log (all)" status="valid" subtitle="Append-only patches with source/timestamps">
+          <button style={{ fontSize: 12, marginBottom: 6 }} onClick={() => setShowPatchLog((s) => !s)}>
+            {showPatchLog ? "Hide log" : "Show log"}
+          </button>
+          {showPatchLog && (
+            <>
+              {patchLog.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
+              ) : (
+                <ul style={{ fontSize: 12, color: "#334155", maxHeight: 200, overflow: "auto" }}>
+                  {[...patchLog].reverse().map((p, i) => {
+                    const val = (p as any).value as any;
+                    return (
+                      <li key={`${p.path}-${i}`}>
+                        {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
+                        {val?.status ? `[status=${val.status}]` : ""}{" "}
+                        {val?.createdAt ? `[created=${val.createdAt}]` : ""} {val?.updatedAt ? `[updated=${val.updatedAt}]` : ""}{" "}
+                        {val?.sourceType ? `[src: ${val.sourceType}${val.sourceId ? `/${val.sourceId}` : ""}]` : ""}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+        </AssumptionCard>
+      </div>
+
+      <div>
+        <AssumptionCard title="Node status" status="valid" subtitle="Chips with status/deps">
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {nodeChips.map((n) => (
+              <div
+                key={n.id}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #e2e8f0",
+                  background: n.status === "blocked" ? "#fee2e2" : n.dirty ? "#fef9c3" : "#dcfce7",
+                  color: "#0f172a",
+                  fontSize: 12
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>{n.id}</div>
+                <div>{n.type} {n.status}{n.dirty ? " (dirty)" : ""}</div>
+                {(n.dependsOn.length > 0 || n.temporalAfter.length > 0 || n.temporalBefore.length > 0) && (
+                  <div style={{ marginTop: 2 }}>
+                    {n.dependsOn.length > 0 && <div>depends: {n.dependsOn.join(", ")}</div>}
+                    {n.temporalAfter.length > 0 && <div>after: {n.temporalAfter.join(", ")}</div>}
+                    {n.temporalBefore.length > 0 && <div>before: {n.temporalBefore.join(", ")}</div>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </AssumptionCard>
+
+        <AssumptionCard title="State JSON" status="valid" subtitle="Snapshot (raw + summary)">
+          <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", color: "#0f172a", maxHeight: 220, overflow: "auto" }}>
+            {JSON.stringify(current?.state, null, 2)}
+          </pre>
+        </AssumptionCard>
+      </div>
     </div>
   );
 }
