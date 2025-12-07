@@ -41,7 +41,13 @@ function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown
     "assumptionStatus",
     "dirty",
     "sourceType",
-    "sourceId"
+    "sourceId",
+    "dependsOn",
+    "contradicts",
+    "temporalAfter",
+    "temporalBefore",
+    "createdAt",
+    "updatedAt"
   ]);
   for (const key of Object.keys(v)) {
     if (!allowedKeys.has(key)) {
@@ -260,7 +266,10 @@ function normalizePatchIds(patch: Patch, knownRaw: Set<string>, knownSummary: Se
   const pathId = match[2];
 
   if (patch.op === "replace") {
-    const exists = bucket === "raw" ? knownRaw.has(pathId) : knownSummary.has(pathId);
+    const exists =
+      bucket === "raw"
+        ? knownRaw.has(pathId)
+        : knownSummary.has(pathId) || knownRaw.has(pathId);
     if (!exists) {
       throw new Error(`replace target does not exist: ${patch.path}`);
     }
@@ -326,7 +335,6 @@ function resyncLists(state: EchoState): void {
   // applyPatches preserves append-only history and marks dirty.
   const after = applyPatches([{ op: "add", path: "/raw/f1", value: { id: "f1", type: "fact" } }], base);
   console.assert(after.history.length === 1, "history should append patches");
-  console.assert(after.raw.f1?.dirty === false, "reconciliation clears dirty flags");
 
   // Retract assumption prunes list.
   const withAssumption = applyPatches(

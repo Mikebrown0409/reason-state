@@ -1,5 +1,5 @@
 import { ReasonState } from "../../src/engine/ReasonState.js";
-import type { EchoState, Patch } from "../../src/engine/types.js";
+import type { EchoState, Patch, ReasonStateOptions } from "../../src/engine/types.js";
 import { grokPlanWithContext, type GrokPlanResult } from "../../src/tools/grokChat.js";
 import { xSearch } from "../../src/tools/xSearch.js";
 import { mockBooking } from "../../src/tools/mockBooking.js";
@@ -28,9 +28,10 @@ function clone<T>(obj: T): T {
 export async function runXAgent(
   query: string,
   budget: number,
-  injectedAssumptions: Array<{ summary: string; sourceId?: string; sourceType?: string }> = []
+  injectedAssumptions: Array<{ summary: string; sourceId?: string; sourceType?: string }> = [],
+  options: ReasonStateOptions = {}
 ): Promise<XAgentResult> {
-  const engine = new ReasonState();
+  const engine = new ReasonState(options);
   const events: string[] = [];
   const history: Array<{ state: EchoState; label: string }> = [];
   const planMetaHistory: Array<Omit<GrokPlanResult, "patches"> & { label: string }> = [];

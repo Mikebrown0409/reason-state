@@ -1,5 +1,5 @@
 import { ReasonState } from "../../src/engine/ReasonState.js";
-import type { EchoState, Patch } from "../../src/engine/types.js";
+import type { EchoState, Patch, ReasonStateOptions } from "../../src/engine/types.js";
 import { grokPlanWithContext, type GrokPlanResult } from "../../src/tools/grokChat.js";
 import { mockBooking } from "../../src/tools/mockBooking.js";
 
@@ -20,8 +20,12 @@ function clone<T>(obj: T): T {
  * Minimal agent example: no X API. Seeds goal/budget, uses Grok with deterministic context,
  * then runs governed booking.
  */
-export async function runSimpleAgent(query: string, budget: number): Promise<SimpleAgentResult> {
-  const engine = new ReasonState();
+export async function runSimpleAgent(
+  query: string,
+  budget: number,
+  options: ReasonStateOptions = {}
+): Promise<SimpleAgentResult> {
+  const engine = new ReasonState(options);
   const events: string[] = [];
   const history: Array<{ state: EchoState; label: string }> = [];
   const planMetaHistory: Array<Omit<GrokPlanResult, "patches"> & { label: string }> = [];

@@ -26,6 +26,10 @@ export interface StateNode {
   type: NodeType;
   summary?: string;
   details?: unknown;
+  dependsOn?: string[];
+  contradicts?: string[];
+  temporalAfter?: string[];
+  temporalBefore?: string[];
   sourceId?: string;
   sourceType?: string;
   parentId?: string;

@@ -25,6 +25,12 @@ export function detectContradictions(state: EchoState): string[] {
       contradictions.add(node.id);
       contradictions.add(conflictingId);
     }
+    (node.contradicts ?? []).forEach((cid) => {
+      if (state.raw[cid]) {
+        contradictions.add(node.id);
+        contradictions.add(cid);
+      }
+    });
   }
   return Array.from(contradictions);
 }
@@ -50,10 +56,23 @@ export function applyReconciliation(state: EchoState): EchoState {
     propagateDirty(state, contradictions);
   }
 
+  // Block nodes whose dependencies are missing or dirty.
+  for (const node of Object.values(state.raw)) {
+    if (node.dependsOn && node.dependsOn.length > 0) {
+      const unmet = node.dependsOn.some((dep) => {
+        const target = state.raw[dep];
+        return !target || target.dirty || target.status === "blocked" || state.unknowns.includes(dep);
+      });
+      if (unmet) {
+        node.status = "blocked";
+        node.dirty = true;
+      }
+    }
+  }
+
   for (const node of Object.values(state.raw)) {
     if (node.dirty) {
       node.summary = node.summary ?? stringifyDetails(node);
-      node.dirty = false;
     }
   }
   return state;
@@ -74,6 +93,10 @@ function neighbors(state: EchoState, id: string): string[] {
   const adj = new Set<string>();
   if (node.parentId) adj.add(node.parentId);
   (node.children ?? []).forEach((c) => adj.add(c));
+  (node.dependsOn ?? []).forEach((d) => adj.add(d));
+  (node.contradicts ?? []).forEach((c) => adj.add(c));
+  (node.temporalAfter ?? []).forEach((t) => adj.add(t));
+  (node.temporalBefore ?? []).forEach((t) => adj.add(t));
   const details = node.details as Record<string, unknown> | undefined;
   const conflictingId = details?.contradicts as string | undefined;
   if (conflictingId && state.raw[conflictingId]) adj.add(conflictingId);
@@ -81,6 +104,18 @@ function neighbors(state: EchoState, id: string): string[] {
   for (const other of Object.values(state.raw)) {
     const otherConflicts = (other.details as Record<string, unknown> | undefined)?.contradicts;
     if (otherConflicts === id) adj.add(other.id);
+    (other.contradicts ?? []).forEach((c) => {
+      if (c === id) adj.add(other.id);
+    });
+    (other.dependsOn ?? []).forEach((d) => {
+      if (d === id) adj.add(other.id);
+    });
+    (other.temporalAfter ?? []).forEach((t) => {
+      if (t === id) adj.add(other.id);
+    });
+    (other.temporalBefore ?? []).forEach((t) => {
+      if (t === id) adj.add(other.id);
+    });
   }
   return Array.from(adj);
 }
