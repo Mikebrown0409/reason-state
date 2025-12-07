@@ -106,5 +106,31 @@ describe("applyPatches uuid assignment", () => {
       )
     ).toThrow(/summary value must be string/i);
   });
+
+  it("rejects replace on missing summary id", () => {
+    const known = new Set<string>(["goal"]);
+    expect(() =>
+      validateModelPatches(
+        JSON.stringify([{ op: "replace", path: "/summary/missing", value: "x" }]),
+        known
+      )
+    ).toThrow(/replace must target existing id/i);
+  });
+
+  it("rejects summary replace when id not in state", () => {
+    const state = createEmptyState();
+    expect(() =>
+      applyPatches(
+        [
+          {
+            op: "replace",
+            path: "/summary/missing",
+            value: "should fail"
+          }
+        ],
+        state
+      )
+    ).toThrow(/does not exist/i);
+  });
 });
 
