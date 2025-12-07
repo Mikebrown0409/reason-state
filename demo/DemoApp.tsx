@@ -39,6 +39,8 @@ export function DemoApp() {
   const [agentMessage, setAgentMessage] = useState<string>("");
   const [planMessages, setPlanMessages] = useState<string[]>([]);
   const [agentMode, setAgentMode] = useState<"simple" | "dag">("simple");
+  const [replayStatus, setReplayStatus] = useState<string>("");
+  const [tokenSavings, setTokenSavings] = useState<string>("");
 
   const runLive = () => {
     const q = query;
@@ -96,11 +98,15 @@ export function DemoApp() {
         const regeneratedList = Array.from(lastIds).filter((id) => !reusedList.includes(id));
         setReusedIds(reusedList);
         setRegeneratedIds(regeneratedList);
+        const total = lastIds.size;
+        const savings = total ? Math.round((reused / total) * 100) : 0;
+        setTokenSavings(`${savings}% reused (token/time savings proxy)`);
       } else {
         setReusedCount(0);
         setRegeneratedCount(0);
         setReusedIds([]);
         setRegeneratedIds([]);
+        setTokenSavings("");
       }
     });
   };
@@ -134,6 +140,7 @@ export function DemoApp() {
     engine.applyPatches(current.state.history ?? []);
     const match = JSON.stringify(engine.snapshot.raw) === JSON.stringify(current.state.raw);
     setReplayResult(match ? "Determinism check: OK" : "Determinism check: MISMATCH");
+    setReplayStatus(match ? "Replay OK" : "Replay mismatch");
   };
 
   const recentPatches = (current?.state.history ?? []).slice(-8).reverse();
@@ -241,6 +248,7 @@ export function DemoApp() {
               <div>Reused nodes: {reusedCount}</div>
               <div>Regenerated: {regeneratedCount}</div>
               <div>Bookings: {resolvedBookings} resolved / {blockedBookings} blocked</div>
+              {tokenSavings && <div style={{ gridColumn: "span 2" }}>{tokenSavings}</div>}
               {planMeta && (
                 <div style={{ gridColumn: "span 2" }}>
                   Grok validation: attempts {planMeta.attempts ?? "?"}
@@ -260,10 +268,26 @@ export function DemoApp() {
               ) : (
                 <div>Clean: actions allowed</div>
           )}
-          <button style={{ marginTop: 6, padding: "4px 8px" }} onClick={checkReplay}>
-            Check determinism
-          </button>
-          {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <button style={{ padding: "4px 8px" }} onClick={checkReplay}>
+                Replay & verify
+              </button>
+              {replayStatus && (
+                <span
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 12,
+                    border: "1px solid #e2e8f0",
+                    background: replayStatus.includes("OK") ? "#dcfce7" : "#fee2e2",
+                    color: replayStatus.includes("OK") ? "#166534" : "#b91c1c",
+                    fontSize: 12
+                  }}
+                >
+                  {replayStatus}
+                </span>
+              )}
+            </div>
+            {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
         </div>
           </AssumptionCard>
       </div>

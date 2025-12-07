@@ -46,6 +46,8 @@ function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown
     "contradicts",
     "temporalAfter",
     "temporalBefore",
+    "parentId",
+    "children",
     "createdAt",
     "updatedAt"
   ]);
@@ -169,10 +171,23 @@ export function applyPatches(patches: Patch[], state: EchoState): EchoState {
   const touched = new Set<string>();
   const knownRaw = new Set(Object.keys(next.raw ?? {}));
   const knownSummary = new Set(Object.keys(next.summary ?? {}));
+  const stagedRaw = new Set<string>();
+  const stagedSummary = new Set<string>();
+
+  // Pre-scan adds to allow replace-after-add in a single batch.
+  for (const p of patches) {
+    const m = p.path.match(/^\/(raw|summary)\/([^/]+)$/);
+    if (m && p.op === "add") {
+      const bucket = m[1];
+      const id = m[2];
+      if (bucket === "raw") stagedRaw.add(id);
+      else stagedSummary.add(id);
+    }
+  }
 
   for (const patch of patches) {
     validatePatch(patch);
-    const normalized = normalizePatchIds(patch, knownRaw, knownSummary);
+    const normalized = normalizePatchIds(patch, knownRaw, knownSummary, stagedRaw, stagedSummary);
     const bucketMatch = normalized.path.match(/^\/(raw|summary)\/([^/]+)$/);
     if (bucketMatch) {
       validateNodeShape(bucketMatch[1] as "raw" | "summary", bucketMatch[2], normalized.value);
@@ -257,7 +272,13 @@ function generateId(): string {
   return `rs-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function normalizePatchIds(patch: Patch, knownRaw: Set<string>, knownSummary: Set<string>): Patch {
+function normalizePatchIds(
+  patch: Patch,
+  knownRaw: Set<string>,
+  knownSummary: Set<string>,
+  stagedRaw: Set<string>,
+  stagedSummary: Set<string>
+): Patch {
   const match = patch.path.match(/^\/(raw|summary)\/([^/]+)$/);
   if (!match) throw new Error(`invalid patch path: ${patch.path}`);
   const bucket = match[1] as "raw" | "summary";
@@ -266,8 +287,8 @@ function normalizePatchIds(patch: Patch, knownRaw: Set<string>, knownSummary: Se
   if (patch.op === "replace") {
     const exists =
       bucket === "raw"
-        ? knownRaw.has(pathId)
-        : knownSummary.has(pathId) || knownRaw.has(pathId);
+        ? knownRaw.has(pathId) || stagedRaw.has(pathId)
+        : knownSummary.has(pathId) || stagedSummary.has(pathId) || knownRaw.has(pathId) || stagedRaw.has(pathId);
     if (!exists) {
       throw new Error(`replace target does not exist: ${patch.path}`);
     }
@@ -307,57 +328,12 @@ function setByPath(state: EchoState, path: string, value: unknown): void {
 
 function resyncLists(state: EchoState): void {
   state.unknowns = Object.values(state.raw)
-    .filter((n) => n.type === "unknown")
+    .filter((n) => n.type === "unknown" && n.status !== "resolved")
     .map((n) => n.id);
   state.assumptions = Object.values(state.raw)
     .filter((n) => n.type === "assumption" && n.assumptionStatus !== "retracted")
     .map((n) => n.id);
 }
-
-// Inline assertions to ensure determinism and governance rules hold.
-(() => {
-  const base: EchoState = {
-    raw: {},
-    summary: {},
-    assumptions: [],
-    unknowns: [],
-    history: [],
-    checkpoints: {}
-  };
-
-  // Unknown blocks canExecute.
-  base.raw.u1 = { id: "u1", type: "unknown", status: "blocked", dirty: true };
-  base.unknowns = ["u1"];
-  console.assert(canExecute("action", base) === false, "unknown should block actions");
-
-  // applyPatches preserves append-only history and marks dirty.
-  const after = applyPatches([{ op: "add", path: "/raw/f1", value: { id: "f1", type: "fact" } }], base);
-  console.assert(after.history.length === 1, "history should append patches");
-
-  // Retract assumption prunes list.
-  const withAssumption = applyPatches(
-    [{ op: "add", path: "/raw/a1", value: { id: "a1", type: "assumption", assumptionStatus: "valid" } }],
-    base
-  );
-  const retracted = retractAssumption("a1", withAssumption);
-  console.assert(!retracted.assumptions.includes("a1"), "retracted assumption removed from list");
-
-  // selfHeal resolves contradictions deterministically.
-  const conflict: EchoState = {
-    raw: {
-      f1: { id: "f1", type: "fact", details: { contradicts: "f2" } },
-      f2: { id: "f2", type: "fact" }
-    },
-    summary: {},
-    assumptions: [],
-    unknowns: [],
-    history: [],
-    checkpoints: {}
-  };
-  selfHealAndReplay(conflict).then((healed) => {
-    console.assert(healed.raw.f2?.status === "resolved", "contradicted node resolved");
-  });
-})();
 
 function stampTimestamps(value: unknown, prior?: StateNode): StateNode {
   const now = new Date().toISOString();

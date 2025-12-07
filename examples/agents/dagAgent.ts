@@ -115,11 +115,15 @@ export async function runDagAgent(
 
   // Research X (optional)
   if (options.useX) {
+    if (!engine.canExecute("action")) {
+      events.push("Research skipped: blocked by governance (unknown/dirty)");
+    } else {
     try {
       const xPatches = await xSearch(options.xQuery ?? goal);
       if (xPatches.length > 0) await applyStep(xPatches, "Research X");
     } catch (err) {
       events.push(`X error: ${String(err)}`);
+    }
     }
   }
 
@@ -184,19 +188,42 @@ export async function runDagAgent(
     }
   }
 
-  // Book
-  const bookingPatches = await mockBooking({
-    id: "dag",
-    destination: goal,
-    budget,
-    unknowns: engine.snapshot.unknowns,
-    startDate: options.bookingDates?.startDate,
-    endDate: options.bookingDates?.endDate
-  });
-  await applyStep(
-    bookingPatches,
-    bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked" ? "Booking blocked" : "Booking placed"
-  );
+  // Book (reuse existing booking node when same destination/budget)
+  if (!engine.canExecute("action")) {
+    events.push("Booking skipped: blocked by governance (unknown/dirty)");
+  } else {
+    const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
+    const reuseExisting =
+      existingBookingId &&
+      (engine.snapshot.raw[existingBookingId]?.details as any)?.destination === goal &&
+      (engine.snapshot.raw[existingBookingId]?.details as any)?.budget === budget;
+    const bookingId = reuseExisting
+      ? existingBookingId!
+      : `booking-${goal}-${options.bookingDates?.startDate ?? "nodates"}-${options.bookingDates?.endDate ?? "nodates"}`;
+
+    const bookingPatches = await mockBooking({
+      id: bookingId,
+      destination: goal,
+      budget,
+      unknowns: engine.snapshot.unknowns,
+      startDate: options.bookingDates?.startDate,
+      endDate: options.bookingDates?.endDate
+    });
+    const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
+    await applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
+
+    // Refresh agent note on success to avoid stale guidance
+    if (!bookingBlocked) {
+      const notePatch: Patch = {
+        op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+        path: "/summary/agent-note",
+        value:
+          (bookingPatches[0]?.value as any)?.summary ??
+          `Booked for ${goal} within budget ${budget}.`
+      };
+      await applyStep([notePatch], "Refresh agent note");
+    }
+  }
 
   // Optional injected contradiction to showcase self-heal
   if (options.injectContradiction) {

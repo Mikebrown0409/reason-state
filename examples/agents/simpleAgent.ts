@@ -47,6 +47,7 @@ export async function runSimpleAgent(
   const events: string[] = [];
   const history: Array<{ state: EchoState; label: string }> = [];
   const planMetaHistory: Array<Omit<GrokPlanResult, "patches"> & { label: string }> = [];
+  let planMessages: string[] | undefined;
 
   const applyStep = (patches: Patch[], label: string) => {
     engine.applyPatches(patches);
@@ -122,7 +123,6 @@ export async function runSimpleAgent(
   const planSummaries: string[] = [];
   let planPatches: Patch[] | undefined;
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
-  let planMessages: string[] | undefined;
   let agentNote: string | undefined;
 
   async function runPlanTurn(label: string, goal: string) {
@@ -183,9 +183,30 @@ export async function runSimpleAgent(
     }
   }
 
+  // Identify existing booking to reuse/replace
+  const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
+  const reuseExisting =
+    existingBookingId &&
+    (engine.snapshot.raw[existingBookingId]?.details as any)?.destination === query &&
+    (engine.snapshot.raw[existingBookingId]?.details as any)?.budget === budget;
+  const bookingId = reuseExisting ? existingBookingId! : `booking-${query}-${options.bookingDates?.startDate ?? "nodates"}-${options.bookingDates?.endDate ?? "nodates"}`;
+
   // Booking (governed)
+  if (!engine.canExecute("action")) {
+    events.push("Booking skipped: blocked by governance (unknown/dirty)");
+    return {
+      history,
+      events,
+      plan: planSummaries.join("\n---\n"),
+      planPatches,
+      planMeta,
+      planMetaHistory,
+      planMessages,
+      agentMessage: agentNote && agentNote !== "Agent note: pending" ? agentNote : ""
+    };
+  }
   const bookingPatches = await mockBooking({
-    id: "simple",
+    id: bookingId,
     destination: query,
     budget,
     unknowns: engine.snapshot.unknowns,
@@ -211,6 +232,16 @@ export async function runSimpleAgent(
       : `Booked for ${bookingNode?.details?.destination ?? query} within budget ${bookingNode?.details?.budget ?? budget}.`
     : "";
   const agentMessage = agentNote || agentMessageFromBooking;
+
+  // Refresh agent-note on booking success to avoid stale guidance.
+  if (!bookingBlocked) {
+    const notePatch: Patch = {
+      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+      path: "/summary/agent-note",
+      value: agentMessageFromBooking || "Booking resolved."
+    };
+    applyStep([notePatch], "Refresh agent note");
+  }
 
   const planSummary = planSummaries.join("\n---\n");
 

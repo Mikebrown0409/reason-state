@@ -25,7 +25,7 @@ describe("integration: simple agent with log replay", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rs-log-"));
     const logPath = path.join(tmpDir, "log.ndjson");
 
-    const res = await runSimpleAgent("Tokyo travel", 4000, { logPath, checkpointInterval: 2 });
+    const res = await runSimpleAgent("Tokyo travel", 4000, [], { logPath, checkpointInterval: 2 });
 
     expect(res.history.length).toBeGreaterThan(0);
     expect(res.planPatches?.length).toBeGreaterThan(0);
