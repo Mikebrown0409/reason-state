@@ -146,7 +146,7 @@ export async function runSimpleAgent(
 
   await runPlanTurn(
     "Plan turn 1",
-    `Create a concise plan for: ${query}, budget ${budget}. Consider existing booking summaries; do not overlap dates with blocked/resolved bookings. If clashes exist, ask for new dates. Replace /summary/agent-note with a <=200 char next-step message (summaries only; no details).`
+    `Create a concise plan for: ${query}, budget ${budget}. Consider existing booking summaries; do not overlap dates with blocked/resolved bookings. If clashes exist, ask for new dates. Reflect new facts/assumptions in /summary/agent-note (<=200 chars, summaries only; no details).`
   );
 
   // If governance blockers remain (unknowns/dirty) or no patches, attempt a second turn focused on blockers
@@ -154,8 +154,20 @@ export async function runSimpleAgent(
   if (!planPatches || hasBlockers) {
     await runPlanTurn(
       "Plan turn 2 (resolve blockers)",
-      `Resolve blockers/unknowns and refine plan for: ${query}, budget ${budget}. Prioritize clearing unknowns/dirty nodes and avoid date clashes with existing bookings. Replace /summary/agent-note with a <=200 char next-step message (summaries only; no details).`
+      `Resolve blockers/unknowns and refine plan for: ${query}, budget ${budget}. Prioritize clearing unknowns/dirty nodes and avoid date clashes with existing bookings. Reflect new facts/assumptions in /summary/agent-note (<=200 chars, summaries only; no details).`
     );
+  }
+
+  // Fallback: if Grok didn't refresh agent-note, surface the latest injected facts so the UI reflects them.
+  if ((!agentNote || agentNote === "Agent note: pending") && injectedFacts && injectedFacts.length > 0) {
+    const factsText = injectedFacts.map((f) => f.summary).join("; ");
+    const notePatch: Patch = {
+      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+      path: "/summary/agent-note",
+      value: `Updated with new facts: ${factsText}`
+    };
+    applyStep([notePatch], "Agent note fallback (facts)");
+    agentNote = engine.snapshot.summary?.["agent-note"];
   }
 
   // Resolve date-related unknowns if user provided dates (auto-remediate)

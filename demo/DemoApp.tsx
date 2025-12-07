@@ -47,12 +47,30 @@ export function DemoApp() {
   const [lastRecomputedId, setLastRecomputedId] = useState<string>("");
   const [changedNodes, setChangedNodes] = useState<string[]>([]);
   const [replayInfo, setReplayInfo] = useState<{ patches: number; rawMatch: boolean; summaryMatch: boolean }>();
+  const [lastRunMode, setLastRunMode] = useState<"normal" | "semantic" | "temporal">("normal");
+  const [lastRunLabel, setLastRunLabel] = useState<string>("");
 
-  const runLive = (rollbackId?: string) => {
+  const markDependentsDirty = (state: EchoState | undefined) => {
+    if (!state) return state;
+    const clone = JSON.parse(JSON.stringify(state)) as EchoState;
+    const raw = clone.raw ?? {};
+    Object.values(raw).forEach((node: any) => {
+      if (node.type === "action" || node.type === "planning") {
+        node.dirty = true;
+        node.updatedAt = new Date().toISOString();
+      }
+    });
+    return clone;
+  };
+
+  const runLive = (rollbackId?: string, mode: "normal" | "semantic" | "temporal" = "normal") => {
     const q = query;
     const b = budget;
     const injected = factInput ? [{ summary: factInput }] : [];
     const snapshotBefore = current?.state ? JSON.parse(JSON.stringify(current.state.raw)) : null;
+    const initialState = mode === "semantic" ? markDependentsDirty(current?.state) : current?.state;
+    setLastRunMode(mode);
+    setLastRunLabel(mode === "semantic" ? "Semantic recompute" : mode === "temporal" ? "Temporal rollback" : "Run");
     const runner =
       agentMode === "dag"
         ? runDagAgent(
@@ -64,7 +82,7 @@ export function DemoApp() {
               useX: false,
               rollbackNodeId: rollbackId
             },
-            current?.state
+            initialState
           )
         : runDemoAgent(
             q,
@@ -73,7 +91,7 @@ export function DemoApp() {
             {
               bookingDates: startDate && endDate ? { startDate, endDate } : undefined
             },
-            current?.state
+            initialState
           );
     runner.then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
@@ -383,26 +401,36 @@ export function DemoApp() {
         {agentMessage && (
           <AssumptionCard title="Agent response" status="valid" subtitle="Model-guided next step">
             <div style={{ fontSize: 13, color: "#0f172a" }}>{agentMessage}</div>
-            {hasBlocked && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              {hasBlocked && (
                 <button
                   style={{ padding: "4px 8px" }}
                   onClick={() => {
                     const blockedId =
                       Object.values(current?.state.raw ?? {}).find((n) => n.type === "action" && n.status === "blocked")?.id ??
                       rollbackTarget;
-                    runLive(agentMode === "dag" ? blockedId : undefined);
+                    runLive(agentMode === "dag" ? blockedId : undefined, "temporal");
                   }}
                 >
-                  Rollback & recompute subtree
+                  Rollback & recompute (temporal/tool)
                 </button>
-              </div>
-            )}
+              )}
+              {dirtyNodes.length > 0 && (
+                <button
+                  style={{ padding: "4px 8px" }}
+                  onClick={() => {
+                    runLive(undefined, "semantic");
+                  }}
+                >
+                  Recompute affected plan (new facts)
+                </button>
+              )}
+            </div>
           </AssumptionCard>
         )}
 
         {diffBefore && diffAfter && (
-          <AssumptionCard title="Subtree diff" status="valid" subtitle="Before → After (last run)">
+          <AssumptionCard title="Subtree diff" status="valid" subtitle={`Before → After (${lastRunLabel || "last run"})`}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>

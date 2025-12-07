@@ -139,9 +139,16 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
     ];
   }
 
-  const clash = calendarHolds.find((hold) =>
-    overlaps(input.startDate, input.endDate, hold.startDate, hold.endDate)
+  const existingSameHold = calendarHolds.find(
+    (hold) =>
+      hold.destination === input.destination &&
+      hold.startDate === input.startDate &&
+      hold.endDate === input.endDate
   );
+  const clash = calendarHolds.find((hold) => {
+    if (existingSameHold && hold === existingSameHold) return false;
+    return overlaps(input.startDate, input.endDate, hold.startDate, hold.endDate);
+  });
   if (clash) {
     return [
       {
@@ -196,11 +203,13 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
     ];
   }
 
-  calendarHolds.push({
-    startDate: input.startDate ?? "",
-    endDate: input.endDate ?? "",
-    destination: input.destination
-  });
+  if (!existingSameHold) {
+    calendarHolds.push({
+      startDate: input.startDate ?? "",
+      endDate: input.endDate ?? "",
+      destination: input.destination
+    });
+  }
 
   return [
     {

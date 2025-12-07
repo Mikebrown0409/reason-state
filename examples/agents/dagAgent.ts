@@ -156,7 +156,7 @@ export async function runDagAgent(
 
   await runPlanTurn(
     "Plan turn 1",
-    `Create a concise plan for: ${goal}, budget ${budget}. Consider existing booking summaries; avoid overlapping dates with blocked/resolved bookings. If clashes exist, ask for new dates. Replace /summary/agent-note with <=200 char next step (summaries only).`
+    `Create a concise plan for: ${goal}, budget ${budget}. Consider existing booking summaries; avoid overlapping dates with blocked/resolved bookings. If clashes exist, ask for new dates. Reflect new facts/assumptions in /summary/agent-note (<=200 chars, summaries only; no details).`
   );
 
   // Optional rollback of a subtree before re-planning
@@ -170,8 +170,20 @@ export async function runDagAgent(
   if (!planPatches || hasBlockersNow()) {
     await runPlanTurn(
       "Plan turn 2 (resolve blockers)",
-      `Resolve blockers/unknowns and refine plan for: ${goal}, budget ${budget}. Avoid overlapping dates with existing bookings; if clash, ask for new dates. Replace /summary/agent-note with <=200 char next step (summaries only).`
+      `Resolve blockers/unknowns and refine plan for: ${goal}, budget ${budget}. Avoid overlapping dates with existing bookings; if clash, ask for new dates. Reflect new facts/assumptions in /summary/agent-note (<=200 chars, summaries only; no details).`
     );
+  }
+
+  // Fallback: if Grok didn't refresh agent-note, surface the latest injected facts so the UI reflects them.
+  if ((!agentNote || agentNote === "Agent note: pending") && injectedFacts && injectedFacts.length > 0) {
+    const factsText = injectedFacts.map((f) => f.summary).join("; ");
+    const notePatch: Patch = {
+      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
+      path: "/summary/agent-note",
+      value: `Updated with new facts: ${factsText}`
+    };
+    await applyStep([notePatch], "Agent note fallback (facts)");
+    agentNote = engine.snapshot.summary?.["agent-note"];
   }
 
   // Resolve date unknowns if dates provided (auto-remediate)
