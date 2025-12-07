@@ -10,10 +10,25 @@ export type SimpleAgentResult = {
   planPatches?: Patch[];
   planMeta?: Omit<GrokPlanResult, "patches">;
   planMetaHistory?: Array<Omit<GrokPlanResult, "patches"> & { label: string }>;
+  planMessages?: string[];
+  agentMessage?: string;
 };
 
 function clone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
+}
+
+function describePatch(p: Patch): string {
+  if (p.path.startsWith("/summary/")) {
+    return `Set ${p.path.replace("/summary/", "")} summary to "${String(p.value)}"`;
+  }
+  if (p.path.startsWith("/raw/")) {
+    const id = p.path.replace("/raw/", "");
+    const val = p.value as any;
+    const status = val?.status ? ` status=${val.status}` : "";
+    return `Upsert node ${id} (${val?.type ?? "node"})${status}`;
+  }
+  return `${p.op} ${p.path}`;
 }
 
 /**
@@ -24,9 +39,11 @@ export async function runSimpleAgent(
   query: string,
   budget: number,
   injectedFacts?: Array<{ summary: string }>,
-  options: ReasonStateOptions & { bookingDates?: { startDate: string; endDate: string } } = {}
+  options: ReasonStateOptions & { bookingDates?: { startDate: string; endDate: string } } = {},
+  initialState?: EchoState
 ): Promise<SimpleAgentResult> {
-  const engine = new ReasonState(options);
+  const baseState = initialState ? clone(initialState) : undefined;
+  const engine = new ReasonState(options, baseState);
   const events: string[] = [];
   const history: Array<{ state: EchoState; label: string }> = [];
   const planMetaHistory: Array<Omit<GrokPlanResult, "patches"> & { label: string }> = [];
@@ -37,48 +54,59 @@ export async function runSimpleAgent(
     events.push(label);
   };
 
-  // Seed goal and budget
-  applyStep(
-    [
-      {
-        op: "add",
-        path: "/raw/goal",
-        value: {
-          id: "goal",
-          type: "planning",
-          summary: `Plan for ${query}`,
-          details: { destination: query, budget }
-        }
-      },
-      { op: "add", path: "/summary/goal", value: `Goal: ${query}` },
-      { op: "add", path: "/summary/budget", value: `Budget: ${budget}` },
-      {
-        op: "add",
-        path: "/raw/budget",
-        value: { id: "budget", type: "fact", details: { amount: budget } }
-      }
-    ],
-    `Seed goal (${budget.toLocaleString()} budget)`
-  );
+  // Seed or update goal and budget
+  const hasGoal = Boolean(engine.snapshot.raw["goal"]);
+  const hasBudget = Boolean(engine.snapshot.raw["budget"]);
+  const seedPatches: Patch[] = [];
+  seedPatches.push({
+    op: hasGoal ? "replace" : "add",
+    path: "/raw/goal",
+    value: {
+      id: "goal",
+      type: "planning",
+      summary: `Plan for ${query}`,
+      details: { destination: query, budget }
+    }
+  });
+  seedPatches.push({
+    op: hasGoal ? "replace" : "add",
+    path: "/summary/goal",
+    value: `Goal: ${query}`
+  });
+  seedPatches.push({
+    op: hasBudget ? "replace" : "add",
+    path: "/raw/budget",
+    value: { id: "budget", type: "fact", details: { amount: budget } }
+  });
+  seedPatches.push({
+    op: hasBudget ? "replace" : "add",
+    path: "/summary/budget",
+    value: `Budget: ${budget}`
+  });
+  applyStep(seedPatches, hasGoal || hasBudget ? "Update goal/budget" : `Seed goal (${budget.toLocaleString()} budget)`);
 
   if (injectedFacts && injectedFacts.length > 0) {
-    const factPatches = injectedFacts.flatMap((f, i) => [
-      {
-        op: "add",
-        path: `/raw/input-${i}`,
-        value: {
-          id: `input-${i}`,
-          type: "assumption",
-          summary: f.summary,
-          details: { provided: true },
-          assumptionStatus: "valid",
-          status: "open",
-          sourceType: "user",
-          sourceId: `input-${i}`
-        }
-      },
-      { op: "add", path: `/summary/input-${i}`, value: `User input: ${f.summary}` }
-    ]);
+    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) => k.startsWith("input-")).length;
+    const factPatches: Patch[] = injectedFacts.flatMap((f, i) => {
+      const id = `input-${existingInputs + i}`;
+      return [
+        {
+          op: "add",
+          path: `/raw/${id}`,
+          value: {
+            id,
+            type: "assumption",
+            summary: f.summary,
+            details: { provided: true },
+            assumptionStatus: "valid",
+            status: "open",
+            sourceType: "user",
+            sourceId: id
+          }
+        },
+        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` }
+      ];
+    });
     applyStep(factPatches, "Injected facts");
   }
 
@@ -86,6 +114,7 @@ export async function runSimpleAgent(
   const planSummaries: string[] = [];
   let planPatches: Patch[] | undefined;
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
+  let planMessages: string[] | undefined;
 
   async function runPlanTurn(label: string, goal: string) {
     try {
@@ -95,6 +124,7 @@ export async function runSimpleAgent(
         planPatches = planRes.patches;
         applyStep(planRes.patches, label);
         planSummaries.push(JSON.stringify(planRes.patches, null, 2));
+        planMessages = planRes.patches.map(describePatch);
       } else {
         events.push(`${label}: empty plan`);
       }
@@ -124,17 +154,22 @@ export async function runSimpleAgent(
     startDate: options.bookingDates?.startDate ?? "2025-12-20",
     endDate: options.bookingDates?.endDate ?? "2025-12-23"
   });
-  applyStep(
-    bookingPatches,
-    bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked" ? "Booking blocked" : "Booking placed"
-  );
+  const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
+  applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
 
   if (planMeta) {
     events.push(`Grok validation: attempts=${planMeta.attempts}${planMeta.lastError ? ` lastError=${planMeta.lastError}` : ""}`);
   }
 
+  const bookingNode = bookingPatches[0]?.value as any;
+  const agentMessage = bookingBlocked
+    ? bookingNode?.details?.conflict
+      ? `Booking blocked: dates clash (${bookingNode.details.conflict.startDate}–${bookingNode.details.conflict.endDate}). Try new dates.`
+      : bookingNode?.summary ?? "Booking blocked."
+    : `Booked for ${bookingNode?.details?.destination ?? query} within budget ${bookingNode?.details?.budget ?? budget}.`;
+
   const planSummary = planSummaries.join("\n---\n");
 
-  return { history, events, plan: planSummary, planPatches, planMeta, planMetaHistory };
+  return { history, events, plan: planSummary, planPatches, planMeta, planMetaHistory, planMessages, agentMessage };
 }
 

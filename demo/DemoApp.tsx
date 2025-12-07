@@ -35,25 +35,35 @@ export function DemoApp() {
   const [resolvedBookings, setResolvedBookings] = useState(0);
   const [showPatchLog, setShowPatchLog] = useState(false);
   const [showModelContext, setShowModelContext] = useState(false);
+  const [agentMessage, setAgentMessage] = useState<string>("");
+  const [planMessages, setPlanMessages] = useState<string[]>([]);
 
   const runLive = () => {
     const q = query;
     const b = budget;
     const injected = factInput ? [{ summary: factInput }] : [];
-    runDemoAgent(q, b, injected, {
-      bookingDates: startDate && endDate ? { startDate, endDate } : undefined
-    }).then((res) => {
+    runDemoAgent(
+      q,
+      b,
+      injected,
+      {
+        bookingDates: startDate && endDate ? { startDate, endDate } : undefined
+      },
+      current?.state
+    ).then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
       setIdx(withIdx.length - 1);
       setPlan(res.plan ?? "");
       setPlanMeta(res.planMeta);
       setPlanMetaHistory(res.planMetaHistory ?? []);
+      setPlanMessages(res.planMessages ?? []);
+      setAgentMessage(res.agentMessage ?? "");
       setEvents(res.events);
       setTimeline((prev) => [...prev, `Turn ${res.history.length}: ${res.events.join(" | ")}`]);
-      const allPatches = res.history.flatMap((h) => h.state.history ?? []);
-      setPatchLog(allPatches);
-      const bookings = Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter((n) => n.type === "action");
+      const latest = res.history[res.history.length - 1]?.state;
+      setPatchLog(latest?.history ?? []);
+      const bookings = Object.values(latest?.raw ?? {}).filter((n) => n.type === "action");
       setBlockedBookings(bookings.filter((b) => b.status === "blocked").length);
       setResolvedBookings(bookings.filter((b) => b.status === "resolved").length);
       if (res.history.length >= 2) {
@@ -259,7 +269,15 @@ export function DemoApp() {
 
       {plan && (
         <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
-          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
+            {planMessages.length > 0 ? (
+              <ul style={{ fontSize: 13, color: "#0f172a" }}>
+                {planMessages.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
+            )}
             {planMetaHistory.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: "#334155" }}>
                 <div style={{ fontWeight: 600 }}>Validation/backoff</div>
@@ -281,6 +299,12 @@ export function DemoApp() {
             )}
         </AssumptionCard>
       )}
+
+        {agentMessage && (
+          <AssumptionCard title="Agent response" status="valid" subtitle="Model-guided next step">
+            <div style={{ fontSize: 13, color: "#0f172a" }}>{agentMessage}</div>
+          </AssumptionCard>
+        )}
 
       <AssumptionCard title="Assumptions" status="valid" subtitle="Click to retract and replay">
         {assumptions.length === 0 ? (
