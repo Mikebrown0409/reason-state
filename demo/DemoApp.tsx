@@ -44,10 +44,6 @@ export function DemoApp() {
   const [blockedBookings, setBlockedBookings] = useState(0);
   const [resolvedBookings, setResolvedBookings] = useState(0);
 
-  useEffect(() => {
-    runLive();
-  }, []);
-
   const runLive = () => {
     runDemoAgent(query, budget, factInput ? [{ summary: factInput }] : []).then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
@@ -202,6 +198,26 @@ export function DemoApp() {
         />
         <button style={{ marginTop: 6 }} onClick={() => setIdx(history.length - 1)}>
           Jump to now
+        </button>
+        <button
+          style={{ marginTop: 6, marginLeft: 8 }}
+          onClick={() => {
+            setHistory([]);
+            setIdx(0);
+            setPlan("");
+            setPlanMeta(undefined);
+            setPlanMetaHistory([]);
+            setEvents([]);
+            setTimeline([]);
+            setReplayResult("");
+            setReusedCount(0);
+            setRegeneratedCount(0);
+            setPatchLog([]);
+            setBlockedBookings(0);
+            setResolvedBookings(0);
+          }}
+        >
+          Reset
         </button>
       </div>
 
