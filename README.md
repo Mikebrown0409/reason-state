@@ -41,6 +41,18 @@ retractAssumption("u1", engine.snapshot);
 - X calls use bearer token (app-only). Set `X_BEARER_TOKEN` (or `GROK_API_KEY`) in env.
 - Vercel deploy placeholder; SQLite with in-memory fallback included.
 
+## Env
+- Copy `.env.example` to `.env` and fill:
+  - `VITE_X_BEARER_TOKEN`, `VITE_GROK_API_KEY` (required)
+  - `VITE_X_BASE_URL`, `VITE_GROK_BASE_URL` (optional)
+
+## What's verified (demo)
+- Live X search populates assumptions.
+- Live Grok plan patch applied to state.
+- Mock booking gated by unknowns/dirty.
+- Slider/time machine driven by live agent patches (X→Grok→booking).
+- Determinism check button replays patches and compares state.
+
 ## Deploy (draft)
 - Set env: `GROK_API_KEY` (or `X_BEARER_TOKEN`) for X search.
 - For persistence on serverless, mount a writable SQLite file or provide remote persistence; otherwise falls back to in-memory.

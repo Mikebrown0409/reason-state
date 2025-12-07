@@ -1,104 +1,226 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Timeline } from "../src/ui/Timeline.js";
 import { AssumptionCard } from "../src/ui/AssumptionCard.js";
-import { ReasonState, applyPatches, retractAssumption } from "../src/engine/ReasonState.js";
-import { xSearch } from "../src/tools/xSearch.js";
+import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
+import { runDemoAgent } from "../src/agent/demoAgent.js";
 import confetti from "canvas-confetti";
 
-export type DemoResult = { events: string[]; state: EchoState };
+type HistoryEntry = { state: EchoState; label: string; idx: number };
 
-export async function runDemoFlow(): Promise<DemoResult> {
-  const engine = new ReasonState();
-  const events: string[] = [];
-
-  const startPatches: Patch[] = [
-    {
-      op: "add",
-      path: "/raw/planning-1",
-      value: {
-        id: "planning-1",
-        type: "planning",
-        summary: "Plan Tokyo retreat",
-        details: { destination: "Tokyo", budget: 4000 }
-      }
-    },
-    {
-      op: "add",
-      path: "/raw/budget",
-      value: { id: "budget", type: "fact", details: { amount: 4000 } }
-    },
-    {
-      op: "add",
-      path: "/raw/assumption-destination",
-      value: { id: "assumption-destination", type: "assumption", assumptionStatus: "valid", summary: "Destination=Tokyo" }
-    }
-  ];
-  engine.applyPatches(startPatches);
-  events.push("Tokyo plan created ($4k)");
-
-  engine.retractAssumption("assumption-destination");
-  events.push("Retracted Tokyo assumption");
-
-  engine.applyPatches([
-    { op: "add", path: "/raw/assumption-destination-am", value: { id: "assumption-destination-am", type: "assumption", assumptionStatus: "valid", summary: "Destination=Amsterdam" } }
-  ]);
-  events.push("Added Amsterdam assumption");
-
-  engine.applyPatches([
-    { op: "replace", path: "/raw/budget", value: { id: "budget", type: "fact", details: { amount: 4500 } } }
-  ]);
-  events.push("Budget increased to $4.5k");
-
-  engine.applyPatches([
-    { op: "replace", path: "/raw/budget", value: { id: "budget", type: "fact", details: { amount: 4000 } } }
-  ]);
-  events.push("Budget reverted to $4k");
-
-  return { events, state: engine.snapshot };
+function diffNodes(prev?: EchoState, curr?: EchoState): string[] {
+  if (!prev || !curr) return [];
+  const changed: string[] = [];
+  const ids = new Set([...Object.keys(prev.raw), ...Object.keys(curr.raw)]);
+  ids.forEach((id) => {
+    const a = prev.raw[id];
+    const b = curr.raw[id];
+    if (JSON.stringify(a) !== JSON.stringify(b)) changed.push(id);
+  });
+  return changed;
 }
 
 export function DemoApp() {
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [idx, setIdx] = useState(0);
+  const current = history[idx] ?? history[history.length - 1];
+  const prev = history[idx - 1];
+  const changed = diffNodes(prev?.state, current?.state);
+  const [plan, setPlan] = useState<string>("");
   const [events, setEvents] = useState<string[]>([]);
-  const [previews, setPreviews] = useState<{ id: string; summary: string }[]>([]);
+  const [query, setQuery] = useState("Tokyo");
+  const [budget, setBudget] = useState(4000);
+  const [replayResult, setReplayResult] = useState<string>("");
 
   useEffect(() => {
-    runDemoFlow().then((res) => setEvents(res.events));
-    xSearch("Tokyo travel").then((patches) => {
-      setPreviews(
-        patches.map((p) => ({
-          id: (p.value as any)?.id ?? p.path,
-          summary: (p.value as any)?.summary ?? ""
-        }))
-      );
-    });
+    runLive();
   }, []);
 
+  const runLive = () => {
+    runDemoAgent(query, budget).then((res) => {
+      const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
+      setHistory(withIdx);
+      setIdx(withIdx.length - 1);
+      setPlan(res.plan ?? "");
+      setEvents(res.events);
+    });
+  };
+
   useEffect(() => {
-    if (events.length >= 5) {
-      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
-      console.log("Metrics: tokensSaved=88%, blockedActions=1, selfHeal=1");
+    if (history.length >= 3) {
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
     }
-  }, [events]);
+  }, [history.length]);
+
+  const handleAssumptionClick = (id: string) => {
+    const currState = current?.state;
+    if (!currState || !currState.raw[id]) return;
+    const node = currState.raw[id];
+    const engine = new ReasonState({}, currState);
+    engine.retractAssumption(id);
+    const newState: HistoryEntry = { state: JSON.parse(JSON.stringify(engine.snapshot)), label: `Retracted ${id}`, idx: history.length };
+    setHistory((prevHist) => [...prevHist.slice(0, idx + 1), newState]);
+    setIdx(history.length);
+  };
+
+  const assumptions = Object.values(current?.state.raw ?? {}).filter((n) => n.type === "assumption" && n.assumptionStatus !== "retracted");
+  const timelineLabels = history.slice(0, idx + 1).map((h) => h.label);
+
+  const unknowns = current?.state.unknowns ?? [];
+  const dirtyNodes = Object.values(current?.state.raw ?? {}).filter((n) => n.dirty);
+
+  const checkReplay = () => {
+    if (!current?.state) return;
+    const engine = new ReasonState();
+    engine.applyPatches(current.state.history ?? []);
+    const match = JSON.stringify(engine.snapshot.raw) === JSON.stringify(current.state.raw);
+    setReplayResult(match ? "Determinism check: OK" : "Determinism check: MISMATCH");
+  };
+
+  const recentPatches = (current?.state.history ?? []).slice(-8).reverse();
 
   return (
-    <div style={{ maxWidth: 520, margin: "0 auto", fontFamily: "Inter, sans-serif" }}>
-      <h1>reason-state demo</h1>
-      <AssumptionCard title="Destination" status="valid" subtitle="Reactive, retractable assumptions">
-        Tokyo → Amsterdam retract flow with budget tweaks.
+    <div style={{ maxWidth: 960, margin: "0 auto", fontFamily: "Inter, sans-serif", padding: 16 }}>
+      <h1>reason-state time machine</h1>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center" }}>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Query" style={{ padding: 6, flex: 1 }} />
+        <input
+          type="number"
+          value={budget}
+          onChange={(e) => setBudget(Number(e.target.value))}
+          placeholder="Budget"
+          style={{ padding: 6, width: 120 }}
+        />
+        <button onClick={runLive} style={{ padding: "6px 12px" }}>
+          Run agent
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <div style={{ flex: 1, background: "#f8fafc", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 600 }}>Metrics</div>
+          <div style={{ fontSize: 12, color: "#334155" }}>
+            <div>X posts used: {(current?.state.history ?? []).filter((p) => (p as any).value?.type === "assumption").length}</div>
+            <div>Grok plan length: {plan.length}</div>
+            <div>Blocked actions: {events.filter((e) => e.toLowerCase().includes("blocked")).length}</div>
+            <div>Self-heal events: {events.filter((e) => e.toLowerCase().includes("self-heal")).length}</div>
+            <div>Unknowns: {unknowns.length}</div>
+            <div>Dirty nodes: {dirtyNodes.length}</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, background: "#f8fafc", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 600 }}>Governance</div>
+          {unknowns.length > 0 || dirtyNodes.length > 0 ? (
+            <div style={{ fontSize: 12, color: "#b91c1c" }}>
+              {unknowns.length > 0 && <div>Blocked: unknowns present ({unknowns.join(", ")})</div>}
+              {dirtyNodes.length > 0 && <div>Dirty nodes: {dirtyNodes.map((n) => n.id).join(", ")}</div>}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#0f172a" }}>Clean: actions allowed</div>
+          )}
+          <button style={{ marginTop: 6, padding: "4px 8px" }} onClick={checkReplay}>
+            Check determinism
+          </button>
+          {replayResult && <div style={{ fontSize: 12, marginTop: 4 }}>{replayResult}</div>}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+          Timeline step: {idx + 1} / {history.length}
+        </label>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(history.length - 1, 0)}
+          value={idx}
+          onChange={(e) => setIdx(Number(e.target.value))}
+          style={{ width: "100%" }}
+        />
+        <button style={{ marginTop: 6 }} onClick={() => setIdx(history.length - 1)}>
+          Jump to now
+        </button>
+      </div>
+
+      <Timeline items={timelineLabels} />
+
+      {plan && (
+        <AssumptionCard title="Grok plan" status="valid" subtitle="Generated live">
+          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{plan}</div>
+        </AssumptionCard>
+      )}
+
+      <AssumptionCard title="Assumptions" status="valid" subtitle="Click to retract and replay">
+        {assumptions.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>No active assumptions</div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {assumptions.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => handleAssumptionClick(a.id)}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 12,
+                  padding: "6px 10px",
+                  background: "#f8fafc",
+                  cursor: "pointer"
+                }}
+              >
+                {a.summary ?? a.id}
+              </button>
+            ))}
+          </div>
+        )}
       </AssumptionCard>
-      <Timeline items={events} />
-      {previews.length > 0 && (
-        <AssumptionCard title="Live X previews" status="valid" subtitle="Recent posts via Grok/X">
-          <ul>
-            {previews.map((p) => (
-              <li key={p.id} style={{ fontSize: 12, color: "#334155" }}>
-                {p.summary}
+
+      <AssumptionCard title="State" status="valid" subtitle="Current node summaries">
+        <ul style={{ fontSize: 12, color: "#334155" }}>
+          {Object.values(current?.state.raw ?? {}).map((n) => (
+            <li key={n.id}>
+              <strong>{n.id}</strong> [{n.type}] {n.status ?? ""} {n.dirty ? "(dirty)" : ""}{" "}
+              {n.assumptionStatus ? `[${n.assumptionStatus}]` : ""}{" "}
+              {n.sourceType ? `(source: ${n.sourceType}${n.sourceId ? `/${n.sourceId}` : ""})` : ""} {n.summary ? `— ${n.summary}` : ""}
+            </li>
+          ))}
+        </ul>
+      </AssumptionCard>
+
+      <AssumptionCard title="Event log (patches)" status="valid" subtitle="Recent patches applied">
+        {recentPatches.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>No patches</div>
+        ) : (
+          <ul style={{ fontSize: 12, color: "#334155" }}>
+            {recentPatches.map((p, i) => (
+              <li key={`${p.path}-${i}`}>
+                {p.op} {p.path} {p.reason ? `(${p.reason})` : ""}{" "}
+                {(p as any).value?.sourceType ? `[src: ${(p as any).value.sourceType}${(p as any).value.sourceId ? `/${(p as any).value.sourceId}` : ""}]` : ""}
               </li>
             ))}
           </ul>
-        </AssumptionCard>
-      )}
+        )}
+      </AssumptionCard>
+
+      <AssumptionCard title="Diff (previous → current)" status="valid" subtitle="Changed nodes on last step">
+        {changed.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>No changes</div>
+        ) : (
+          <ul style={{ fontSize: 12, color: "#334155" }}>
+            {changed.map((id) => {
+              const prevNode = prev?.state.raw[id];
+              const currNode = current?.state.raw[id];
+              return (
+                <li key={id}>
+                  <strong>{id}</strong>
+                  <div>Prev: {prevNode?.summary ?? JSON.stringify(prevNode)}</div>
+                  <div>Curr: {currNode?.summary ?? JSON.stringify(currNode)}</div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </AssumptionCard>
     </div>
   );
 }

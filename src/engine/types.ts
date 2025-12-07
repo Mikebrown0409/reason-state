@@ -26,6 +26,8 @@ export interface StateNode {
   type: NodeType;
   summary?: string;
   details?: unknown;
+  sourceId?: string;
+  sourceType?: string;
   parentId?: string;
   children?: string[];
   status?: NodeStatus;

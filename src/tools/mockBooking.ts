@@ -35,7 +35,9 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
         type: "action",
         status: "resolved",
         summary: `Booked for ${input.destination ?? "TBD"} within budget`,
-        details: { budget: input.budget, destination: input.destination }
+        details: { budget: input.budget, destination: input.destination },
+        sourceType: "booking",
+        sourceId: id
       }
     }
   ];

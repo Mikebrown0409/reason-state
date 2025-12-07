@@ -6,7 +6,7 @@ alwaysApply: true
 
 - **Zero Mock Tools in Final Demo**: All tools and data sources must be **real or real-equivalent**.  
   - `xSearch.ts` must use the **actual X API** (`@xai/grok-sdk` or official X endpoints).  
-  - If API key missing for demo, fall back to **live public X posts** via keyword/semantic search with `since:2025-12-06` (real data, no hardcoded JSON).  
+  - If API key missing for demo, fall back to **live public X posts** via keyword/semantic search with `start_time:2025-12-06` (real data, no hardcoded JSON).  
   - Booking tool can be fake **only if it returns realistic structured data** and is blocked by `canExecute()` when unknowns exist — never a no-op.
 
 - **LangGraph Agent Must Be Real and Battle-Tested**:  

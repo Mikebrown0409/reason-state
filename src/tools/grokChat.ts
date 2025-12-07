@@ -57,7 +57,9 @@ export function grokPlanPatch(content: string): Patch {
       id: "grok-plan",
       type: "planning",
       summary: content,
-      details: { source: "grok" }
+      details: { source: "grok" },
+      sourceType: "grok-plan",
+      sourceId: "grok-plan"
     }
   };
 }

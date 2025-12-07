@@ -58,7 +58,9 @@ export async function xSearch(query: string): Promise<Patch[]> {
         type: "assumption",
         summary: hit.text,
         details: { author: hit.author, created_at: hit.created_at, query },
-        assumptionStatus: "valid"
+        assumptionStatus: "valid",
+        sourceId: hit.id,
+        sourceType: "x-post"
       }
     }));
   } catch (err) {
