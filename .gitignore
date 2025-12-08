@@ -1,0 +1,23 @@
+# Node/vite artifacts
+node_modules
+dist
+coverage
+
+# Env/secrets
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+.idea
+.vscode
+
+# Cursor / editor metadata
+.cursor
+.cursorignore
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
