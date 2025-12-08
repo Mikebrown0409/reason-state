@@ -15,12 +15,11 @@ npm run dev
 
 ### Minimal API (<10 LOC)
 ```ts
-import { planAndAct } from "reason-state/agent/planAndAct.js";
+import { plan } from "reason-state/agent/plan.js";
 
-const res = await planAndAct({
-  goal: "Plan Tokyo trip",
-  budget: 4000,
-  facts: [{ summary: "Allergic to sushi" }]
+const res = await plan({
+  goal: "Refactor payment module",
+  facts: [{ summary: "Use TypeScript" }]
 });
 console.log(res.agentMessage);        // agent note (always present; fallback if model skips)
 console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
@@ -31,7 +30,7 @@ console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
 import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/api/facade.js";
 ```
 - `addNode/updateNode`: validated, append-only patches.
-- `recompute`: semantic plan+act (uses built-in prompt, agent-note fallback).
+- `recompute`: semantic plan (uses built-in prompt, agent-note fallback).
 - `rollbackSubtree`: temporal/tool replay for a specific node id (you supply the tool).
 
 ## What’s in the box
@@ -41,20 +40,20 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 - Context builder: summaries-only, deterministic ordering, prioritizes dirty/new/assumptions, token budgeted.
 - Replay/time-travel: NDJSON append-only log + checkpoints; `replayFromLog` deterministic rebuild.
 - Tools: Grok 4.1 planner (strict prompt/validation/backoff), X search (fails loud w/o token).
-- Default agent wrapper: `planAndAct` with built-in prompt and agent-note fallback (plan-only). Example tools (mock booking, X) live in `examples/` and are not shipped.
+- Default agent helper: `plan` with built-in prompt and agent-note fallback (plan-only). Example tools (mock booking, X) live in `examples/` and are not shipped.
 
 ## File map
 - `src/engine`: core ReasonState, types, storage, reconciliation, replay.
 - `src/tools`: `grokChat` (planner integration). Example tools (`mockBooking`, `xSearch`) live in `examples/` and are not shipped by default.
 - `src/context`: context builder.
-- `src/agent/planAndAct.ts`: default helper (plan-only, fallback).
+- `src/agent/planAndAct.ts`: default helper (plan-only, fallback). Also exported as `agent/plan`. Deprecated alias: `planAndAct`.
 - `src/api/facade.ts`: minimal facade (add/update/recompute/rollback).
 - `examples/agents`: dag/simple examples; example tools.
 - `demo`: DemoApp (rollback/recompute/diff/replay UI).
 
 ## Demo flow
-- Plan trip → add facts → semantic recompute (agent note updates, diff view).
-- Example booking tool (mock) used in demo agent to showcase governance; not shipped in package.
+- Plan → add facts → semantic recompute (agent note updates, diff view).
+- Example booking/tooling lives in `examples/`; not shipped in package.
 - Replay & verify: rebuild from log and show hash match/badges.
 
 ## Notes
@@ -79,10 +78,10 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 
 ## Dev API surface (current)
 - `ReasonState` — governed state + applyPatchesWithCheckpoint/replayFromLog.
-- `planAndAct` — default plan wrapper (prompt baked, agent-note fallback; plan-only).
+- `plan` — default plan helper (prompt baked, agent-note fallback; plan-only). `planAndAct` remains as a deprecated alias.
 - `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree`.
 - `contextBuilder.buildContext` — deterministic summaries-only context.
-- `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules).
+- `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules); plug your own planner via `planner` in `plan` if desired.
 
 ## Docs
 - System prompt: `docs/system-prompt.md` (add/replace only; no /raw writes from model; statuses open/blocked/resolved/dirty).

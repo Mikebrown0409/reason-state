@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/api/facade.ts",
     "./agent/planAndAct": "./src/agent/planAndAct.ts",
+    "./agent/plan": "./src/agent/planAndAct.ts",
     "./api": "./src/api/facade.ts",
     "./context": "./src/context/contextBuilder.ts",
     "./engine": "./src/engine/ReasonState.ts",

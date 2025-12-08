@@ -2,13 +2,25 @@ import { ReasonState } from "../engine/ReasonState.js";
 import type { EchoState, Patch, ReasonStateOptions } from "../engine/types.js";
 import { grokPlanWithContext, type GrokPlanResult } from "../tools/grokChat.js";
 
+export type PlannerResult = {
+  patches: Patch[];
+  attempts?: number;
+  lastError?: string;
+  raw?: string;
+};
+
+export type Planner = (state: EchoState, prompt: string) => Promise<PlannerResult>;
+
 export type PlanAndActInput = {
-  goal: string;
-  budget: number;
+  goal?: string;
+  budget?: number;
   facts?: Array<{ summary: string }>;
+  seedPatches?: Patch[];
+  planner?: Planner;
   options?: ReasonStateOptions;
   initialState?: EchoState;
 };
+export type PlanInput = PlanAndActInput;
 
 export type PlanAndActResult = {
   history: Array<{ state: EchoState; label: string }>;
@@ -20,6 +32,7 @@ export type PlanAndActResult = {
   planMessages?: string[];
   agentMessage?: string;
 };
+export type PlanResult = PlanAndActResult;
 
 function clone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
@@ -38,17 +51,23 @@ function describePatch(p: Patch): string {
   return `${p.op} ${p.path}`;
 }
 
-const DEFAULT_PLAN_PROMPT = (goal: string, budget: number) =>
-  `Create a concise plan for: ${goal}, budget ${budget}. Consider existing booking summaries; avoid overlapping dates with blocked/resolved bookings. If clashes exist, ask for new dates. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
+const DEFAULT_PLAN_PROMPT = (goal?: string, budget?: number) => {
+  const g = goal ?? "the current objective";
+  const b = budget !== undefined ? `budget ${budget}` : "no budget provided";
+  return `Create a concise plan for: ${g}, ${b}. Consider existing summaries and avoid conflicts in dependencies. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
+};
 
-const BLOCKER_PROMPT = (goal: string, budget: number) =>
-  `Resolve blockers/unknowns and refine plan for: ${goal}, budget ${budget}. Avoid overlapping dates with existing bookings; if clash, ask for new dates. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
+const BLOCKER_PROMPT = (goal?: string, budget?: number) => {
+  const g = goal ?? "the current objective";
+  const b = budget !== undefined ? `budget ${budget}` : "no budget provided";
+  return `Resolve blockers/unknowns and refine plan for: ${g}, ${b}. Avoid conflicts in dependencies; if blocked, surface the needed inputs. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
+};
 
 /**
  * planAndAct: minimal, governed wrapper with built-in prompt and deterministic agent-note fallback.
  */
-export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResult> {
-  const { goal, budget, facts, options, initialState } = input;
+export async function plan(input: PlanAndActInput): Promise<PlanAndActResult> {
+  const { goal, budget, facts, seedPatches = [], planner, options, initialState } = input;
   const baseState = initialState ? clone(initialState) : undefined;
   const engine = new ReasonState(options, baseState);
   const events: string[] = [];
@@ -62,24 +81,37 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
     events.push(label);
   };
 
-  // Seed goal/budget and agent note
-  const hasGoal = Boolean(engine.snapshot.raw["goal"]);
-  const hasBudget = Boolean(engine.snapshot.raw["budget"]);
-  const hasAgentNote = Boolean(engine.snapshot.summary?.["agent-note"]);
-  const seed: Patch[] = [
-    {
-      op: hasGoal ? "replace" : "add",
-      path: "/raw/goal",
-      value: { id: "goal", type: "planning", summary: `Plan for ${goal}`, details: { destination: goal, budget } }
-    },
-    { op: hasGoal ? "replace" : "add", path: "/summary/goal", value: `Goal: ${goal}` },
-    { op: hasBudget ? "replace" : "add", path: "/raw/budget", value: { id: "budget", type: "fact", details: { amount: budget } } },
-    { op: hasBudget ? "replace" : "add", path: "/summary/budget", value: `Budget: ${budget}` }
-  ];
-  if (!hasAgentNote) {
-    seed.push({ op: "add", path: "/summary/agent-note", value: "Agent note: pending" });
+  // Optional seeding (domain-agnostic)
+  if (seedPatches.length > 0) {
+    applyStep(seedPatches, "Seed patches");
   }
-  applyStep(seed, hasGoal || hasBudget ? "Update goal/budget" : `Seed goal (${budget.toLocaleString()} budget)`);
+  if (goal !== undefined) {
+    const hasGoal = Boolean(engine.snapshot.raw["goal"]);
+    applyStep(
+      [
+        {
+          op: hasGoal ? "replace" : "add",
+          path: "/raw/goal",
+          value: { id: "goal", type: "planning", summary: `Plan for ${goal}`, details: { destination: goal, budget } }
+        },
+        { op: hasGoal ? "replace" : "add", path: "/summary/goal", value: `Goal: ${goal}` }
+      ],
+      hasGoal ? "Update goal" : "Seed goal"
+    );
+  }
+  if (budget !== undefined) {
+    const hasBudget = Boolean(engine.snapshot.raw["budget"]);
+    applyStep(
+      [
+        { op: hasBudget ? "replace" : "add", path: "/raw/budget", value: { id: "budget", type: "fact", details: { amount: budget } } },
+        { op: hasBudget ? "replace" : "add", path: "/summary/budget", value: `Budget: ${budget}` }
+      ],
+      hasBudget ? "Update budget" : "Seed budget"
+    );
+  }
+  if (!engine.snapshot.summary?.["agent-note"]) {
+    applyStep([{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }], "Seed agent note");
+  }
 
   // Inject facts/assumptions with summaries
   if (facts && facts.length > 0) {
@@ -112,9 +144,11 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
   let agentNote: string | undefined;
 
+  const plannerFn = planner ?? (async (state: EchoState, prompt: string) => grokPlanWithContext(state, prompt));
+
   async function runPlanTurn(label: string, prompt: string) {
     try {
-      const planRes = await grokPlanWithContext(engine.snapshot, prompt);
+      const planRes = await plannerFn(engine.snapshot, prompt);
       planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
       if (planRes.patches.length > 0) {
         planPatches = planRes.patches;
@@ -162,4 +196,7 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
     agentMessage: resolvedAgentMessage
   };
 }
+
+// Deprecated alias for compatibility
+export const planAndAct = plan;
 
