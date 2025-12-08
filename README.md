@@ -13,18 +13,21 @@ npm install
 npm run dev
 ```
 
-### Minimal API (<10 LOC)
+### Minimal API (core path)
 ```ts
-import { plan } from "reason-state/agent/plan.js";
+import { addNode, updateNode, recompute } from "reason-state/api/facade.js";
+import { buildContext } from "reason-state/context/contextBuilder.js";
 
-const res = await plan({
-  seedPatches: [
-    { op: "add", path: "/raw/task", value: { id: "task", type: "planning", summary: "Refactor payment module" } },
-    { op: "add", path: "/summary/task", value: "Refactor payment module" }
-  ],
-  facts: [{ summary: "Use TypeScript" }]
-});
-console.log(res.agentMessage);        // agent note (always present; fallback if model skips)
+// Seed state
+let state = addNode({ id: "task", type: "planning", summary: "Refactor module" });
+state = updateNode("task", { summary: "Refactor payment module" }, {}, state);
+
+// Build deterministic, summaries-only context for your model
+const context = buildContext(state);
+// ...call your LLM/tool with `context`...
+
+// Apply new patches via recompute/plan helper (optional)
+const res = await recompute({ goal: "Refactor payment module", initialState: state });
 console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
 ```
 
@@ -39,22 +42,23 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 ## What’s in the box
 - JSON-first governed graph: raw vs summary, lineage, timestamps, edges (`depends_on`, `contradicts`, `temporalBefore/After`), no deletes.
 - Patch DSL (add/replace only), Zod-validated, engine-assigned UUIDs.
-- Governance: dirty/unknown gating, dependency/temporal blocking, contradiction detection, self-heal/rollback helpers.
+- Governance signals: dirty/unknown/assumption status; dependency/temporal/contradiction handling; optional gating via `canExecute`; rollback helper.
 - Context builder: summaries-only, deterministic ordering, prioritizes dirty/new/assumptions, token budgeted.
 - Replay/time-travel: NDJSON append-only log + checkpoints; `replayFromLog` deterministic rebuild.
 - Tools: Grok 4.1 planner (strict prompt/validation/backoff), X search (fails loud w/o token).
-- Default agent helper: `plan` with built-in prompt and agent-note fallback (plan-only). Example tools (mock booking, X) live in `examples/` and are not shipped.
+- Optional helper: `plan` with built-in prompt and agent-note fallback (plan-only). Examples (mock booking, coding agent) live in `examples/` and are not shipped.
 
-## File map
+## File map (shipped)
 - `src/engine`: core ReasonState, types, storage, reconciliation, replay.
-- `src/tools`: `grokChat` (planner integration). Example tools (`mockBooking`, `xSearch`) live in `examples/` and are not shipped by default.
+- `src/tools`: `grokChat` (planner integration).
 - `src/context`: context builder.
 - `src/agent/planAndAct.ts`: default helper (plan-only, fallback). Also exported as `agent/plan`. Deprecated alias: `planAndAct`.
 - `src/api/facade.ts`: minimal facade (add/update/recompute/rollback).
-- `examples/agents`: dag/simple examples; example tools.
-- `demo`: DemoApp (rollback/recompute/diff/replay UI).
+- `src/index.ts`: top-level exports.
 
-## Demo flow
+Not shipped: `examples/` agents/tools; demo UI.
+
+## Demo flow (examples only)
 - Plan → add facts → semantic recompute (agent note updates, diff view).
 - Example booking/tooling lives in `examples/`; not shipped in package.
 - Replay & verify: rebuild from log and show hash match/badges.
@@ -81,10 +85,10 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 
 ## Dev API surface (current)
 - `ReasonState` — governed state + applyPatchesWithCheckpoint/replayFromLog.
-- `plan` — default plan helper (prompt baked, agent-note fallback; plan-only). `planAndAct` remains as a deprecated alias. Provide `seedPatches` and optional `facts`; inject a custom `planner` if desired.
+- `plan` — optional plan helper (prompt baked, agent-note fallback; plan-only). `planAndAct` remains as a deprecated alias.
 - `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree`.
 - `contextBuilder.buildContext` — deterministic summaries-only context.
-- `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules); plug your own planner via `planner` in `plan` if desired.
+- `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules); plug your own planner if desired.
 
 ## Docs
 - System prompt: `docs/system-prompt.md` (add/replace only; no /raw writes from model; statuses open/blocked/resolved/dirty).
