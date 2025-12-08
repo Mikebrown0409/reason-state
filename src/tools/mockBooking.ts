@@ -15,7 +15,7 @@ let calendarHolds: Array<{ startDate: string; endDate: string; destination?: str
 function seedCalendar() {
   calendarHolds = [
     { startDate: "2025-12-20", endDate: "2025-12-23", destination: "Tokyo" },
-    { startDate: "2025-12-24", endDate: "2025-12-27", destination: "Amsterdam" }
+    { startDate: "2025-12-24", endDate: "2025-12-27", destination: "Amsterdam" },
   ];
 }
 
@@ -60,14 +60,14 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           summary: "Booking blocked by unknowns",
           details: { unknowns: input.unknowns },
           sourceType: "booking",
-          sourceId: bookingId
-        }
+          sourceId: bookingId,
+        },
       },
       {
         op: "add",
         path: `/summary/${bookingId}`,
-        value: `Booking ${bookingId}: blocked (unknowns=${input.unknowns.join(",")})`
-      }
+        value: `Booking ${bookingId}: blocked (unknowns=${input.unknowns.join(",")})`,
+      },
     ];
   }
 
@@ -83,14 +83,14 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           summary: "Booking missing destination or budget",
           details: { destination: input.destination, budget: input.budget },
           sourceType: "booking",
-          sourceId: bookingId
-        }
+          sourceId: bookingId,
+        },
       },
       {
         op: "add",
         path: `/summary/${bookingId}`,
-        value: `Booking ${bookingId}: blocked (missing destination/budget)`
-      }
+        value: `Booking ${bookingId}: blocked (missing destination/budget)`,
+      },
     ];
   }
 
@@ -109,8 +109,8 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           summary: "Travel dates missing; provide start/end",
           details: { reason: "dates_missing", required: true },
           sourceType: "booking",
-          sourceId: bookingId
-        }
+          sourceId: bookingId,
+        },
       },
       {
         op: "add",
@@ -120,22 +120,26 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           type: "action",
           status: "blocked",
           summary: "Booking blocked: dates missing",
-          details: { destination: input.destination, budget: input.budget, missing: ["startDate", "endDate"] },
+          details: {
+            destination: input.destination,
+            budget: input.budget,
+            missing: ["startDate", "endDate"],
+          },
           sourceType: "booking",
           sourceId: bookingId,
-          dependsOn: [unknownId]
-        }
+          dependsOn: [unknownId],
+        },
       },
       {
         op: "add",
         path: `/summary/${bookingId}`,
-        value: `Booking ${bookingId}: blocked (missing dates)`
+        value: `Booking ${bookingId}: blocked (missing dates)`,
       },
       {
         op: "add",
         path: `/summary/${unknownId}`,
-        value: `Unknown ${unknownId}: travel dates missing`
-      }
+        value: `Unknown ${unknownId}: travel dates missing`,
+      },
     ];
   }
 
@@ -164,17 +168,17 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
             budget: input.budget,
             startDate: input.startDate,
             endDate: input.endDate,
-            conflict: clash
+            conflict: clash,
           },
           sourceType: "booking",
-          sourceId: bookingId
-        }
+          sourceId: bookingId,
+        },
       },
       {
         op: "add",
         path: `/summary/${bookingId}`,
-        value: `Booking ${bookingId}: blocked (clash ${clash.startDate}–${clash.endDate} for ${clash.destination ?? "unknown"})`
-      }
+        value: `Booking ${bookingId}: blocked (clash ${clash.startDate}–${clash.endDate} for ${clash.destination ?? "unknown"})`,
+      },
     ];
   }
 
@@ -194,12 +198,12 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
             budget: input.budget,
             startDate: input.startDate,
             endDate: input.endDate,
-            paymentStatus: payment.status
+            paymentStatus: payment.status,
           },
           sourceType: "booking",
-          sourceId: bookingId
-        }
-      }
+          sourceId: bookingId,
+        },
+      },
     ];
   }
 
@@ -207,7 +211,7 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
     calendarHolds.push({
       startDate: input.startDate ?? "",
       endDate: input.endDate ?? "",
-      destination: input.destination
+      destination: input.destination,
     });
   }
 
@@ -227,17 +231,16 @@ export async function mockBooking(input: BookingInput): Promise<Patch[]> {
           startDate: input.startDate,
           endDate: input.endDate,
           paymentIntentId: payment.id,
-          paymentStatus: payment.status
+          paymentStatus: payment.status,
         },
         sourceType: "booking",
-        sourceId: bookingId
-      }
+        sourceId: bookingId,
+      },
     },
     {
       op: "add",
       path: `/summary/${bookingId}`,
-      value: `Booking ${bookingId}: resolved (${input.destination} ${input.startDate}–${input.endDate})`
-    }
+      value: `Booking ${bookingId}: resolved (${input.destination} ${input.startDate}–${input.endDate})`,
+    },
   ];
 }
-

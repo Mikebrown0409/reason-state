@@ -15,10 +15,10 @@ describe("node shape validation", () => {
             type: "fact",
             summary: "ok",
             details: { a: 1 },
-            status: "open"
-          }
+            status: "open",
+          },
         },
-        { op: "add", path: "/summary/fact-1", value: "ok" }
+        { op: "add", path: "/summary/fact-1", value: "ok" },
       ],
       state
     );
@@ -34,8 +34,8 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/raw/bad-type",
-            value: { id: "bad-type", type: "weird", summary: "nope" }
-          }
+            value: { id: "bad-type", type: "weird", summary: "nope" },
+          },
         ],
         state
       )
@@ -50,8 +50,8 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/raw/bad-status",
-            value: { id: "bad-status", type: "fact", status: "planned" }
-          }
+            value: { id: "bad-status", type: "fact", status: "planned" },
+          },
         ],
         state
       )
@@ -66,8 +66,8 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/raw/bad-assumption",
-            value: { id: "bad-assumption", type: "assumption", assumptionStatus: "made-up" }
-          }
+            value: { id: "bad-assumption", type: "assumption", assumptionStatus: "made-up" },
+          },
         ],
         state
       )
@@ -82,8 +82,8 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/raw/bad-details",
-            value: { id: "bad-details", type: "fact", details: "not-object" }
-          }
+            value: { id: "bad-details", type: "fact", details: "not-object" },
+          },
         ],
         state
       )
@@ -98,8 +98,8 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/raw/bad-extra",
-            value: { id: "bad-extra", type: "fact", summary: "x", extra: "nope" }
-          }
+            value: { id: "bad-extra", type: "fact", summary: "x", extra: "nope" },
+          },
         ],
         state
       )
@@ -114,8 +114,8 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/raw/mismatch",
-            value: { id: "other", type: "fact" }
-          }
+            value: { id: "other", type: "fact" },
+          },
         ],
         state
       )
@@ -130,12 +130,11 @@ describe("node shape validation", () => {
           {
             op: "add",
             path: "/summary/s1",
-            value: { not: "string" }
-          }
+            value: { not: "string" },
+          },
         ],
         state
       )
     ).toThrow(/summary value must be string/i);
   });
 });
-

@@ -9,10 +9,7 @@ import { mockBooking } from "../src/tools/mockBooking.js";
 import type { Patch } from "../src/engine/types.js";
 
 describe("integration: simple agent with log replay", () => {
-  it(
-    "runs agent, persists log, and replays deterministically",
-    { timeout: 40000 },
-    async () => {
+  it("runs agent, persists log, and replays deterministically", { timeout: 40000 }, async () => {
     const key =
       process.env.GROK_API_KEY ||
       process.env.VITE_GROK_API_KEY ||
@@ -53,8 +50,7 @@ describe("integration: simple agent with log replay", () => {
     // Re-run replay to ensure determinism and no new history
     const replayed2 = await engine.replayFromLog(logPath);
     expect(replayed2.history.length).toBe(patches.length);
-    }
-  );
+  });
 
   it(
     "full flow: Tokyo → retract → Amsterdam with governance, log, replay",
@@ -66,8 +62,16 @@ describe("integration: simple agent with log replay", () => {
 
       // Turn 1: Tokyo plan + booking with clash (should be blocked)
       const turn1: Patch[] = [
-        { op: "add", path: "/raw/goal", value: { id: "goal", type: "planning", summary: "Plan Tokyo", status: "open" } },
-        { op: "add", path: "/raw/budget", value: { id: "budget", type: "fact", summary: "Budget 4000" } }
+        {
+          op: "add",
+          path: "/raw/goal",
+          value: { id: "goal", type: "planning", summary: "Plan Tokyo", status: "open" },
+        },
+        {
+          op: "add",
+          path: "/raw/budget",
+          value: { id: "budget", type: "fact", summary: "Budget 4000" },
+        },
       ];
       engine.applyPatches(turn1);
       const booking1 = await mockBooking({
@@ -76,7 +80,7 @@ describe("integration: simple agent with log replay", () => {
         budget: 4000,
         startDate: "2025-12-21",
         endDate: "2025-12-23",
-        unknowns: engine.snapshot.unknowns
+        unknowns: engine.snapshot.unknowns,
       });
       engine.applyPatches(booking1);
 
@@ -85,8 +89,8 @@ describe("integration: simple agent with log replay", () => {
         {
           op: "replace",
           path: "/raw/goal",
-          value: { id: "goal", type: "planning", summary: "Plan Amsterdam", status: "open" }
-        }
+          value: { id: "goal", type: "planning", summary: "Plan Amsterdam", status: "open" },
+        },
       ];
       engine.applyPatches(turn2);
       const booking2 = await mockBooking({
@@ -95,7 +99,7 @@ describe("integration: simple agent with log replay", () => {
         budget: 4500,
         startDate: "2026-01-10",
         endDate: "2026-01-15",
-        unknowns: engine.snapshot.unknowns
+        unknowns: engine.snapshot.unknowns,
       });
       engine.applyPatches(booking2);
 
@@ -121,6 +125,3 @@ describe("integration: simple agent with log replay", () => {
     }
   );
 });
-
-
-

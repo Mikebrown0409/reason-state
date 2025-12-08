@@ -43,9 +43,13 @@ function describePatch(p: Patch): string {
   }
   if (p.path.startsWith("/raw/")) {
     const id = p.path.replace("/raw/", "");
-    const val = p.value as any;
-    const status = val?.status ? ` status=${val.status}` : "";
-    return `Upsert node ${id} (${val?.type ?? "node"})${status}`;
+    const val = p.value as { type?: string; status?: string } | string | number | undefined;
+    const status =
+      val && typeof val === "object" && "status" in val && val.status
+        ? ` status=${val.status}`
+        : "";
+    const type = val && typeof val === "object" && "type" in val && val.type ? val.type : "node";
+    return `Upsert node ${id} (${type})${status}`;
   }
   return `${p.op} ${p.path}`;
 }
@@ -79,12 +83,17 @@ export async function plan(input: PlanInput): Promise<PlanAndActResult> {
     applyStep(seedPatches, "Seed patches");
   }
   if (!engine.snapshot.summary?.["agent-note"]) {
-    applyStep([{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }], "Seed agent note");
+    applyStep(
+      [{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }],
+      "Seed agent note"
+    );
   }
 
   // Inject facts/assumptions with summaries
   if (facts && facts.length > 0) {
-    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) => k.startsWith("input-")).length;
+    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) =>
+      k.startsWith("input-")
+    ).length;
     const factPatches: Patch[] = facts.flatMap((f, i) => {
       const id = `input-${existingInputs + i}`;
       return [
@@ -99,10 +108,10 @@ export async function plan(input: PlanInput): Promise<PlanAndActResult> {
             assumptionStatus: "valid",
             status: "open",
             sourceType: "user",
-            sourceId: id
-          }
+            sourceId: id,
+          },
         },
-        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` }
+        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` },
       ];
     });
     applyStep(factPatches, "Injected facts");
@@ -113,12 +122,18 @@ export async function plan(input: PlanInput): Promise<PlanAndActResult> {
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
   let agentNote: string | undefined;
 
-  const plannerFn = planner ?? (async (state: EchoState, prompt: string) => grokPlanWithContext(state, prompt));
+  const plannerFn =
+    planner ?? (async (state: EchoState, prompt: string) => grokPlanWithContext(state, prompt));
 
   async function runPlanTurn(label: string, prompt: string) {
     try {
       const planRes = await plannerFn(engine.snapshot, prompt);
-      planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
+      planMetaHistory.push({
+        attempts: planRes.attempts ?? 0,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+        label,
+      });
       if (planRes.patches.length > 0) {
         planPatches = planRes.patches;
         applyStep(planRes.patches, label);
@@ -127,14 +142,20 @@ export async function plan(input: PlanInput): Promise<PlanAndActResult> {
       } else {
         events.push(`${label}: empty plan`);
       }
-      planMeta = { attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw };
+      planMeta = {
+        attempts: planRes.attempts ?? 0,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+      };
     } catch (err) {
       events.push(`${label}: Grok error ${String(err)}`);
     }
   }
 
   await runPlanTurn("Plan turn 1", prompt ?? DEFAULT_PLAN_PROMPT);
-  const hasBlockers = (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
+  const hasBlockers =
+    (engine.snapshot.unknowns?.length ?? 0) > 0 ||
+    Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
   if (!planPatches || hasBlockers) {
     await runPlanTurn("Plan turn 2 (resolve blockers)", prompt ?? BLOCKER_PROMPT);
   }
@@ -145,7 +166,7 @@ export async function plan(input: PlanInput): Promise<PlanAndActResult> {
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: `Updated with new facts: ${factsText}`
+      value: `Updated with new facts: ${factsText}`,
     };
     applyStep([notePatch], "Agent note fallback (facts)");
     agentNote = engine.snapshot.summary?.["agent-note"];
@@ -162,10 +183,9 @@ export async function plan(input: PlanInput): Promise<PlanAndActResult> {
     planMeta,
     planMetaHistory,
     planMessages,
-    agentMessage: resolvedAgentMessage
+    agentMessage: resolvedAgentMessage,
   };
 }
 
 // Deprecated alias for compatibility
 export const planAndAct = plan;
-

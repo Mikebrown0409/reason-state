@@ -241,8 +241,8 @@ export function buildRollbackPatches(state: EchoState, id: string): Patch[] {
         ...node,
         status: "blocked",
         dirty: true,
-        summary: node.summary ?? "Rollback pending"
-      }
+        summary: node.summary ?? "Rollback pending",
+      },
     });
   }
   return patches;
@@ -257,4 +257,3 @@ function depSatisfied(state: EchoState, node: StateNode, dep: string): boolean {
   }
   return !target.dirty && target.status !== "blocked" && !state.unknowns.includes(dep);
 }
-

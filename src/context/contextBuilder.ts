@@ -38,13 +38,11 @@ function defaultBuckets(): BucketSelector[] {
       predicate: (n) =>
         n.type === "unknown" ||
         Boolean(n.dirty) ||
-        (n.type === "assumption" &&
-          Boolean(n.assumptionStatus) &&
-          n.assumptionStatus !== "valid")
+        (n.type === "assumption" && Boolean(n.assumptionStatus) && n.assumptionStatus !== "valid"),
     },
     { label: "Active plans", nodeTypes: ["planning"] },
     { label: "Facts", nodeTypes: ["fact"], topK: 8 },
-    { label: "Assumptions", nodeTypes: ["assumption"], topK: 8 }
+    { label: "Assumptions", nodeTypes: ["assumption"], topK: 8 },
   ];
 }
 
@@ -113,4 +111,3 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
   const context = lines.join("\n");
   return context.length > maxChars ? context.slice(0, maxChars) : context;
 }
-

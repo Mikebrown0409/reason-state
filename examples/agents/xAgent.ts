@@ -52,21 +52,25 @@ export async function runXAgent(
           id: "goal",
           type: "planning",
           summary: `Plan for ${query}`,
-          details: { destination: query, budget }
-        }
+          details: { destination: query, budget },
+        },
       },
       {
         op: "add",
         path: "/raw/budget",
-        value: { id: "budget", type: "fact", details: { amount: budget } }
+        value: { id: "budget", type: "fact", details: { amount: budget } },
       },
       {
         op: "add",
         path: "/raw/assumption-destination",
-        value: { id: "assumption-destination", type: "assumption", assumptionStatus: "valid", summary: `Destination=${query}` }
-      }
-      ,
-      { op: "add", path: "/summary/goal", value: `Goal: ${query}` }
+        value: {
+          id: "assumption-destination",
+          type: "assumption",
+          assumptionStatus: "valid",
+          summary: `Destination=${query}`,
+        },
+      },
+      { op: "add", path: "/summary/goal", value: `Goal: ${query}` },
     ],
     `Seed goal (${budget.toLocaleString()} budget)`
   );
@@ -96,8 +100,8 @@ export async function runXAgent(
         summary: a.summary,
         assumptionStatus: "valid",
         sourceId: a.sourceId ?? `inject-${i}`,
-        sourceType: a.sourceType ?? "user"
-      }
+        sourceType: a.sourceType ?? "user",
+      },
     }));
     applyStep(injectPatches, `Injected assumptions (${injectedAssumptions.length})`);
   }
@@ -110,7 +114,12 @@ export async function runXAgent(
   async function runPlanTurn(label: string, goal: string) {
     try {
       const planRes = await grokPlanWithContext(engine.snapshot, goal);
-      planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
+      planMetaHistory.push({
+        attempts: planRes.attempts,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+        label,
+      });
       if (planRes.patches.length > 0) {
         planPatches = planRes.patches;
         applyStep(planRes.patches, label);
@@ -126,7 +135,9 @@ export async function runXAgent(
 
   await runPlanTurn("Plan turn 1", `Create a concise plan for: ${query}, budget ${budget}`);
 
-  const hasBlockers = (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
+  const hasBlockers =
+    (engine.snapshot.unknowns?.length ?? 0) > 0 ||
+    Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
   if (!planPatches || hasBlockers) {
     await runPlanTurn(
       "Plan turn 2 (resolve blockers)",
@@ -141,19 +152,22 @@ export async function runXAgent(
     budget,
     unknowns: engine.snapshot.unknowns,
     startDate: "2025-12-20",
-    endDate: "2025-12-23"
+    endDate: "2025-12-23",
   });
   applyStep(
     bookingPatches,
-    bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked" ? "Booking blocked" : "Booking placed"
+    bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked"
+      ? "Booking blocked"
+      : "Booking placed"
   );
 
   if (planMeta) {
-    events.push(`Grok validation: attempts=${planMeta.attempts}${planMeta.lastError ? ` lastError=${planMeta.lastError}` : ""}`);
+    events.push(
+      `Grok validation: attempts=${planMeta.attempts}${planMeta.lastError ? ` lastError=${planMeta.lastError}` : ""}`
+    );
   }
 
   const planSummary = planSummaries.join("\n---\n");
 
   return { history, events, plan: planSummary, planPatches, planMeta, planMetaHistory, xCount };
 }
-

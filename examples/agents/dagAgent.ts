@@ -59,7 +59,13 @@ export async function runDagAgent(
   if (!allowed) {
     events.push("Gate: blocked (unknown/dirty)");
     history.push({ state: clone(engine.snapshot), label: "Gate blocked" });
-    return { history, events, planMetaHistory, checkpoints, agentMessage: "Blocked: unknown or dirty nodes present." };
+    return {
+      history,
+      events,
+      planMetaHistory,
+      checkpoints,
+      agentMessage: "Blocked: unknown or dirty nodes present.",
+    };
   }
 
   // Seed or update goal/budget summaries for Grok context
@@ -71,29 +77,29 @@ export async function runDagAgent(
         id: "goal",
         type: "planning",
         summary: `Plan for ${goal}`,
-        details: { destination: goal, budget }
-      }
+        details: { destination: goal, budget },
+      },
     },
     {
       op: engine.snapshot.raw["goal"] ? "replace" : "add",
       path: "/summary/goal",
-      value: `Goal: ${goal}`
+      value: `Goal: ${goal}`,
     },
     {
       op: engine.snapshot.raw["budget"] ? "replace" : "add",
       path: "/raw/budget",
-      value: { id: "budget", type: "fact", details: { amount: budget } }
+      value: { id: "budget", type: "fact", details: { amount: budget } },
     },
     {
       op: engine.snapshot.raw["budget"] ? "replace" : "add",
       path: "/summary/budget",
-      value: `Budget: ${budget}`
+      value: `Budget: ${budget}`,
     },
     {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: "Agent note: pending"
-    }
+      value: "Agent note: pending",
+    },
   ];
   await applyStep(seed, "Seed goal/budget");
 
@@ -109,8 +115,8 @@ export async function runDagAgent(
         assumptionStatus: "valid",
         status: "open",
         sourceId: a.sourceId ?? `inject-${i}`,
-        sourceType: a.sourceType ?? "user"
-      }
+        sourceType: a.sourceType ?? "user",
+      },
     }));
     await applyStep(inject, `Injected assumptions (${inject.length})`);
   }
@@ -120,12 +126,12 @@ export async function runDagAgent(
     if (!engine.canExecute("action")) {
       events.push("Research skipped: blocked by governance (unknown/dirty)");
     } else {
-    try {
-      const xPatches = await xSearch(options.xQuery ?? goal);
-      if (xPatches.length > 0) await applyStep(xPatches, "Research X");
-    } catch (err) {
-      events.push(`X error: ${String(err)}`);
-    }
+      try {
+        const xPatches = await xSearch(options.xQuery ?? goal);
+        if (xPatches.length > 0) await applyStep(xPatches, "Research X");
+      } catch (err) {
+        events.push(`X error: ${String(err)}`);
+      }
     }
   }
 
@@ -135,12 +141,18 @@ export async function runDagAgent(
   let planMessages: string[] | undefined;
   let agentNote: string | undefined;
   const hasBlockersNow = () =>
-    (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
+    (engine.snapshot.unknowns?.length ?? 0) > 0 ||
+    Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
 
   async function runPlanTurn(label: string, prompt: string) {
     try {
       const planRes = await grokPlanWithContext(engine.snapshot, prompt);
-      planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
+      planMetaHistory.push({
+        attempts: planRes.attempts,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+        label,
+      });
       if (planRes.patches.length > 0) {
         planPatches = planRes.patches;
         planMessages = planRes.patches.map(describePatch);
@@ -175,12 +187,16 @@ export async function runDagAgent(
   }
 
   // Fallback: if Grok didn't refresh agent-note, surface the latest injected facts so the UI reflects them.
-  if ((!agentNote || agentNote === "Agent note: pending") && injectedAssumptions && injectedAssumptions.length > 0) {
+  if (
+    (!agentNote || agentNote === "Agent note: pending") &&
+    injectedAssumptions &&
+    injectedAssumptions.length > 0
+  ) {
     const factsText = injectedAssumptions.map((f) => f.summary).join("; ");
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: `Updated with new facts: ${factsText}`
+      value: `Updated with new facts: ${factsText}`,
     };
     await applyStep([notePatch], "Agent note fallback (facts)");
     agentNote = engine.snapshot.summary?.["agent-note"];
@@ -202,8 +218,8 @@ export async function runDagAgent(
             status: "resolved",
             summary: "Travel dates provided",
             details: { ...(node.details as any), resolvedAt: new Date().toISOString() },
-            dirty: false
-          }
+            dirty: false,
+          },
         });
       });
     if (resolveUnknowns.length > 0) {
@@ -216,7 +232,7 @@ export async function runDagAgent(
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: "Need start/end dates to proceed with booking."
+      value: "Need start/end dates to proceed with booking.",
     };
     await applyStep([notePatch], "Booking skipped (dates missing)");
     return {
@@ -227,7 +243,7 @@ export async function runDagAgent(
       planMeta,
       planMetaHistory,
       checkpoints,
-      agentMessage: "Need start/end dates to proceed with booking."
+      agentMessage: "Need start/end dates to proceed with booking.",
     };
   }
 
@@ -235,7 +251,9 @@ export async function runDagAgent(
   if (!engine.canExecute("action")) {
     events.push("Booking skipped: blocked by governance (unknown/dirty)");
   } else {
-    const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
+    const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) =>
+      id.startsWith("booking-")
+    );
     const reuseExisting =
       existingBookingId &&
       (engine.snapshot.raw[existingBookingId]?.details as any)?.destination === goal &&
@@ -250,9 +268,10 @@ export async function runDagAgent(
       budget,
       unknowns: engine.snapshot.unknowns,
       startDate: options.bookingDates?.startDate,
-      endDate: options.bookingDates?.endDate
+      endDate: options.bookingDates?.endDate,
     });
-    const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
+    const bookingBlocked =
+      bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
     await applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
 
     // If blocked by clash, keep node clean and surface actionable note
@@ -262,26 +281,27 @@ export async function runDagAgent(
       const clashPatch: Patch = {
         op: "replace",
         path: `/raw/${bookingId}`,
-        value: { ...(bookingPatches[0]?.value as any), dirty: false }
+        value: { ...(bookingPatches[0]?.value as any), dirty: false },
       };
       await applyStep([clashPatch], "Mark clash clean");
       const notePatch: Patch = {
         op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
         path: "/summary/agent-note",
-        value: clashMessage
+        value: clashMessage,
       };
       await applyStep([notePatch], "Update agent note (clash)");
     }
 
     // Refresh agent note on success to avoid stale guidance
     if (!bookingBlocked) {
-      agentNote = (bookingPatches[0]?.value as any)?.summary ?? `Booked for ${goal} within budget ${budget}.`;
+      agentNote =
+        (bookingPatches[0]?.value as any)?.summary ?? `Booked for ${goal} within budget ${budget}.`;
       const notePatch: Patch = {
         op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
         path: "/summary/agent-note",
         value:
           (bookingPatches[0]?.value as any)?.summary ??
-          `Booked for ${goal} within budget ${budget}.`
+          `Booked for ${goal} within budget ${budget}.`,
       };
       await applyStep([notePatch], "Refresh agent note");
 
@@ -301,14 +321,14 @@ export async function runDagAgent(
             status: "resolved",
             summary: `Superseded by ${bookingId}`,
             dirty: false,
-            updatedAt: new Date().toISOString()
-          }
+            updatedAt: new Date().toISOString(),
+          },
         });
         if (engine.snapshot.summary?.[id]) {
           supersedePatches.push({
             op: "replace",
             path: `/summary/${id}`,
-            value: `Booking ${id} superseded by ${bookingId}`
+            value: `Booking ${id} superseded by ${bookingId}`,
           });
         }
       });
@@ -331,7 +351,7 @@ export async function runDagAgent(
           details: { destination: goal, budget: budget + 1000, contradicts: ["goal"] },
           contradicts: ["goal"],
           sourceType: "agent",
-          sourceId: "dag-contradiction"
+          sourceId: "dag-contradiction",
         }
       : {
           id: contradictionId,
@@ -340,12 +360,12 @@ export async function runDagAgent(
           summary: "Conflicting plan (no goal present)",
           contradicts: ["goal"],
           sourceType: "agent",
-          sourceId: "dag-contradiction"
+          sourceId: "dag-contradiction",
         };
     const contradictionPatch: Patch = {
       op: "add",
       path: `/raw/${contradictionId}`,
-      value: contradictory
+      value: contradictory,
     };
     await applyStep([contradictionPatch], "Inject contradiction");
   }
@@ -360,10 +380,7 @@ export async function runDagAgent(
   }
 
   // Agent message from agent-note or booking status
-  const agentMessage =
-    engine.snapshot.summary?.["agent-note"] ??
-    planMessages?.join(" | ") ??
-    "";
+  const agentMessage = engine.snapshot.summary?.["agent-note"] ?? planMessages?.join(" | ") ?? "";
 
   const planSummary = planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n");
 
@@ -375,8 +392,6 @@ export async function runDagAgent(
     planMeta,
     planMetaHistory,
     checkpoints,
-    agentMessage: agentNote ?? agentMessage
+    agentMessage: agentNote ?? agentMessage,
   };
 }
-
-

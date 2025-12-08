@@ -14,7 +14,7 @@ export function AssumptionCard({ title, status, subtitle, children }: Assumption
         border: "1px solid #e2e8f0",
         borderRadius: "8px",
         padding: "10px",
-        marginBottom: "8px"
+        marginBottom: "8px",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -29,7 +29,7 @@ export function AssumptionCard({ title, status, subtitle, children }: Assumption
               borderRadius: "12px",
               fontSize: 12,
               background: status === "valid" ? "#dcfce7" : "#fee2e2",
-              color: status === "valid" ? "#166534" : "#991b1b"
+              color: status === "valid" ? "#166534" : "#991b1b",
             }}
           >
             {status}
@@ -40,4 +40,3 @@ export function AssumptionCard({ title, status, subtitle, children }: Assumption
     </div>
   );
 }
-

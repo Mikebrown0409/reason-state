@@ -44,20 +44,25 @@ export async function runCodingAgent(input: CodingAgentInput): Promise<CodingAge
         {
           op: "add",
           path: "/raw/goal",
-          value: { id: "goal", type: "planning", summary: `Code task: ${goal}`, details: { goal } }
+          value: { id: "goal", type: "planning", summary: `Code task: ${goal}`, details: { goal } },
         },
-        { op: "add", path: "/summary/goal", value: `Goal: ${goal}` }
+        { op: "add", path: "/summary/goal", value: `Goal: ${goal}` },
       ],
       "Seed goal"
     );
   }
   if (!engine.snapshot.summary?.["agent-note"]) {
-    applyStep([{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }], "Seed agent note");
+    applyStep(
+      [{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }],
+      "Seed agent note"
+    );
   }
 
   // Inject optional facts/assumptions
   if (facts && facts.length > 0) {
-    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) => k.startsWith("input-")).length;
+    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) =>
+      k.startsWith("input-")
+    ).length;
     const factPatches: Patch[] = facts.flatMap((f, i) => {
       const id = `input-${existingInputs + i}`;
       return [
@@ -72,10 +77,10 @@ export async function runCodingAgent(input: CodingAgentInput): Promise<CodingAge
             assumptionStatus: "valid",
             status: "open",
             sourceType: "user",
-            sourceId: id
-          }
+            sourceId: id,
+          },
         },
-        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` }
+        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` },
       ];
     });
     applyStep(factPatches, "Injected facts");
@@ -95,7 +100,6 @@ export async function runCodingAgent(input: CodingAgentInput): Promise<CodingAge
     planMeta: { attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw },
     planMessages: planRes.patches.map((p) => `${p.op} ${p.path}`),
     agentMessage: engine.snapshot.summary?.["agent-note"],
-    context: ctx
+    context: ctx,
   };
 }
-

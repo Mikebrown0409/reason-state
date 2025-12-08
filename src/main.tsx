@@ -13,4 +13,3 @@ ReactDOM.createRoot(root).render(
     <DemoApp />
   </React.StrictMode>
 );
-

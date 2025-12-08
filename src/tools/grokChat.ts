@@ -5,7 +5,9 @@ function getGrokKey(): string {
   const key =
     (globalThis as any)?.process?.env?.GROK_API_KEY ??
     (globalThis as any)?.process?.env?.VITE_GROK_API_KEY ??
-    (typeof import.meta !== "undefined" ? (import.meta as any)?.env?.VITE_GROK_API_KEY : undefined) ??
+    (typeof import.meta !== "undefined"
+      ? (import.meta as any)?.env?.VITE_GROK_API_KEY
+      : undefined) ??
     (typeof __VITE_GROK_API_KEY__ !== "undefined" ? __VITE_GROK_API_KEY__ : undefined);
   if (!key || key.trim().length === 0) {
     throw new Error("GROK_API_KEY (or VITE_GROK_API_KEY) is required for grokChat");
@@ -21,7 +23,7 @@ const FEW_SHOT = [
   '[{"op":"replace","path":"/summary/goal","value":"Goal: plan Tokyo under $4k (source: user/input-1)"}]',
   "",
   "Bad example (do NOT do this):",
-  '[{"op":"add","path":"/raw/new-node","value":{"id":"new-node","details":{"secret":true}}}]'
+  '[{"op":"add","path":"/raw/new-node","value":{"id":"new-node","details":{"secret":true}}}]',
 ].join("\n");
 
 export const SYSTEM_PROMPT = [
@@ -34,7 +36,7 @@ export const SYSTEM_PROMPT = [
   "- Maintain lineage in the summary text when relevant (e.g., mention sourceType/sourceId).",
   "- Output a JSON array of patches (no prose). If unsure, return an empty array.",
   "",
-  FEW_SHOT
+  FEW_SHOT,
 ].join("\n");
 
 declare const __VITE_GROK_API_KEY__: string;
@@ -43,7 +45,9 @@ declare const __VITE_GROK_BASE_URL__: string;
 export async function grokChat(prompt: string, model = DEFAULT_MODEL): Promise<string> {
   const apiKey = getGrokKey();
   const base =
-    (typeof import.meta !== "undefined" ? (import.meta as any)?.env?.VITE_GROK_BASE_URL : undefined) ??
+    (typeof import.meta !== "undefined"
+      ? (import.meta as any)?.env?.VITE_GROK_BASE_URL
+      : undefined) ??
     (typeof __VITE_GROK_BASE_URL__ !== "undefined" ? __VITE_GROK_BASE_URL__ : undefined) ??
     DEFAULT_BASE;
 
@@ -51,13 +55,13 @@ export async function grokChat(prompt: string, model = DEFAULT_MODEL): Promise<s
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 256
-    })
+      max_tokens: 256,
+    }),
   });
 
   if (!res.ok) {
@@ -112,38 +116,25 @@ export function validateModelPatches(content: string, knownIds: Set<string>): Pa
     }
 
     // For summary, require string value.
-    if (bucket === "summary" && typeof value !== "string") {
+    // Only summary writes are allowed (raw already rejected above).
+    if (typeof value !== "string") {
       throw new Error("summary value must be string");
     }
 
-    // If the value is an object, validate status/id when present.
-    if (bucket === "raw") {
-      if (!value || typeof value !== "object") throw new Error("raw value must be object");
-      if ("details" in (value as any)) {
-        throw new Error("details not allowed from model; tools own details");
-      }
-      const status = (value as any).status;
-      if (status !== undefined && !ALLOWED_STATUS.has(status as string)) {
-        throw new Error(`invalid status: ${String(status)}`);
-      }
-      if ((value as any).id && (value as any).id !== id) {
-        throw new Error(`value.id must match path id: ${id}`);
-      }
-    }
-
     patches.push({ op: op as Patch["op"], path, value });
-    // Add known ids for subsequent patches to allow replace/summary updates in same batch.
-    if (bucket === "raw") {
-      knownIds.add(id);
-    }
   }
   return patches;
 }
 
-async function fetchGrok(messages: Array<{ role: string; content: string }>, model = DEFAULT_MODEL): Promise<string> {
+async function fetchGrok(
+  messages: Array<{ role: string; content: string }>,
+  model = DEFAULT_MODEL
+): Promise<string> {
   const apiKey = getGrokKey();
   const base =
-    (typeof import.meta !== "undefined" ? (import.meta as any)?.env?.VITE_GROK_BASE_URL : undefined) ??
+    (typeof import.meta !== "undefined"
+      ? (import.meta as any)?.env?.VITE_GROK_BASE_URL
+      : undefined) ??
     (typeof __VITE_GROK_BASE_URL__ !== "undefined" ? __VITE_GROK_BASE_URL__ : undefined) ??
     DEFAULT_BASE;
 
@@ -151,13 +142,13 @@ async function fetchGrok(messages: Array<{ role: string; content: string }>, mod
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 256
-    })
+      max_tokens: 256,
+    }),
   });
 
   if (!res.ok) {
@@ -190,12 +181,12 @@ export async function grokPlanWithContext(
   const context = buildContext(state);
   const baseMessages = [
     { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: `Goal: ${userGoal}\nContext:\n${context}` }
+    { role: "user", content: `Goal: ${userGoal}\nContext:\n${context}` },
   ];
 
   const knownIds = new Set<string>([
     ...Object.keys(state.raw ?? {}),
-    ...Object.keys(state.summary ?? {})
+    ...Object.keys(state.summary ?? {}),
   ]);
 
   let lastError = "";
@@ -207,8 +198,8 @@ export async function grokPlanWithContext(
             ...baseMessages,
             {
               role: "user",
-              content: `Previous output invalid: ${lastError}. Return ONLY a JSON array of patches following the rules.`
-            }
+              content: `Previous output invalid: ${lastError}. Return ONLY a JSON array of patches following the rules.`,
+            },
           ];
     const content = await fetchGrok(messages, model);
     try {
@@ -235,8 +226,7 @@ export function grokPlanPatch(content: string): Patch {
       summary: content,
       details: { source: "grok" },
       sourceType: "grok-plan",
-      sourceId: "grok-plan"
-    }
+      sourceId: "grok-plan",
+    },
   };
 }
-

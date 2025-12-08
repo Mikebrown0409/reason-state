@@ -36,7 +36,7 @@ async function main() {
     {
       bookingDates: { startDate: "2025-12-10", endDate: "2025-12-15" },
       useX: false,
-      injectContradiction
+      injectContradiction,
     },
     undefined
   );
@@ -47,9 +47,17 @@ async function main() {
   console.log("agentMessage:", res.agentMessage);
   console.log("planMeta:", res.planMeta);
   if (res.planMetaHistory) console.log("planMetaHistory:", res.planMetaHistory);
-  console.log("last state summary keys:", Object.keys(res.history[res.history.length - 1].state.summary ?? {}));
+  console.log(
+    "last state summary keys:",
+    Object.keys(res.history[res.history.length - 1].state.summary ?? {})
+  );
   console.log("unknowns:", res.history[res.history.length - 1].state.unknowns);
-  console.log("bookings:", Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter((n: any) => n.type === "action"));
+  console.log(
+    "bookings:",
+    Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter(
+      (n: any) => n.type === "action"
+    )
+  );
   const contradictions = Object.values(res.history[res.history.length - 1].state.raw ?? {}).filter(
     (n: any) => Array.isArray((n as any).contradicts) && (n as any).contradicts.length > 0
   );
@@ -64,5 +72,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-

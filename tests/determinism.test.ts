@@ -8,7 +8,7 @@ describe("determinism", () => {
     const start: EchoState = createEmptyState();
     const log: Patch[] = [
       { op: "add", path: "/raw/f1", value: { id: "f1", type: "fact", summary: "A fact" } },
-      { op: "add", path: "/summary/f1", value: "A fact" }
+      { op: "add", path: "/summary/f1", value: "A fact" },
     ];
 
     const after = applyPatches(log, start);
@@ -30,10 +30,12 @@ describe("determinism", () => {
     const engine = new ReasonState();
     engine.applyPatches([
       { op: "add", path: "/raw/f1", value: { id: "f1", type: "fact", summary: "A" } },
-      { op: "add", path: "/raw/f2", value: { id: "f2", type: "fact", summary: "B" } }
+      { op: "add", path: "/raw/f2", value: { id: "f2", type: "fact", summary: "B" } },
     ]);
     const before = JSON.parse(JSON.stringify(engine.snapshot.raw));
-    engine.applyPatches([{ op: "replace", path: "/raw/f2", value: { id: "f2", type: "fact", summary: "B updated" } }]);
+    engine.applyPatches([
+      { op: "replace", path: "/raw/f2", value: { id: "f2", type: "fact", summary: "B updated" } },
+    ]);
     const after = engine.snapshot.raw;
 
     const replayed = applyPatches(engine.snapshot.history ?? [], createEmptyState());
@@ -48,4 +50,3 @@ describe("determinism", () => {
     expect(reusePct).toBe(50);
   });
 });
-
