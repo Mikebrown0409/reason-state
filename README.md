@@ -8,35 +8,36 @@ Install:
 npm install reason-state
 ```
 
-```bash
-npm install
-npm run dev
-```
-
-### Minimal API (core path)
+### Core flow (production)
 ```ts
-import { addNode, updateNode, recompute } from "reason-state/api/facade.js";
+import { addNode, updateNode, rollbackSubtree } from "reason-state/api/facade.js";
+import { applyPatches } from "reason-state/engine/ReasonState.js";
 import { buildContext } from "reason-state/context/contextBuilder.js";
 
-// Seed state
+// 1) Write state
 let state = addNode({ id: "task", type: "planning", summary: "Refactor module" });
 state = updateNode("task", { summary: "Refactor payment module" }, {}, state);
 
-// Build deterministic, summaries-only context for your model
+// 2) Build deterministic, summaries-only context for your model (optional but recommended)
 const context = buildContext(state);
 // ...call your LLM/tool with `context`...
 
-// Apply new patches via recompute/plan helper (optional)
-const res = await recompute({ goal: "Refactor payment module", initialState: state });
-console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
+// 3) Apply returned patches (from your model/tool)
+const modelPatches = [
+  { op: "add", path: "/summary/agent-note", value: "Next: split payment service" },
+];
+state = applyPatches(modelPatches, state);
+
+// 4) Recovery/determinism tools
+// rollbackSubtree("task", ...) or replayFromLog(...) when needed
 ```
 
-### Facade
+### Facade (core API)
 ```ts
 import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/api/facade.js";
 ```
 - `addNode/updateNode`: validated, append-only patches.
-- `recompute`: semantic plan (uses built-in prompt, agent-note fallback).
+- `recompute`: optional semantic plan (built-in prompt, agent-note fallback).
 - `rollbackSubtree`: temporal/tool replay for a specific node id (you supply the tool).
 
 ## What’s in the box
