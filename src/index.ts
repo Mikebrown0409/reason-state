@@ -8,5 +8,5 @@ export type {
 } from "./engine/types.js";
 export { applyPatches, retractAssumption, selfHealAndReplay } from "./engine/ReasonState.js";
 export { canExecute } from "./engine/reconciliation.js";
-export { createDemoAgent } from "./adapters/langGraphAdapter.js";
+// Adapters removed; keep core exports lean.
 

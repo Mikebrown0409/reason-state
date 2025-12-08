@@ -11,16 +11,15 @@ export type PlannerResult = {
 
 export type Planner = (state: EchoState, prompt: string) => Promise<PlannerResult>;
 
-export type PlanAndActInput = {
-  goal?: string;
-  budget?: number;
-  facts?: Array<{ summary: string }>;
+export type PlanInput = {
   seedPatches?: Patch[];
+  facts?: Array<{ summary: string }>;
   planner?: Planner;
+  prompt?: string;
   options?: ReasonStateOptions;
   initialState?: EchoState;
 };
-export type PlanInput = PlanAndActInput;
+export type PlanAndActInput = PlanInput;
 
 export type PlanAndActResult = {
   history: Array<{ state: EchoState; label: string }>;
@@ -51,23 +50,17 @@ function describePatch(p: Patch): string {
   return `${p.op} ${p.path}`;
 }
 
-const DEFAULT_PLAN_PROMPT = (goal?: string, budget?: number) => {
-  const g = goal ?? "the current objective";
-  const b = budget !== undefined ? `budget ${budget}` : "no budget provided";
-  return `Create a concise plan for: ${g}, ${b}. Consider existing summaries and avoid conflicts in dependencies. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
-};
+const DEFAULT_PLAN_PROMPT =
+  "Create a concise next-step plan given the current state. Consider existing summaries and avoid conflicts in dependencies. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).";
 
-const BLOCKER_PROMPT = (goal?: string, budget?: number) => {
-  const g = goal ?? "the current objective";
-  const b = budget !== undefined ? `budget ${budget}` : "no budget provided";
-  return `Resolve blockers/unknowns and refine plan for: ${g}, ${b}. Avoid conflicts in dependencies; if blocked, surface the needed inputs. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
-};
+const BLOCKER_PROMPT =
+  "Resolve blockers/unknowns and refine the plan given the current state. Avoid conflicts in dependencies; if blocked, surface the needed inputs. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).";
 
 /**
  * planAndAct: minimal, governed wrapper with built-in prompt and deterministic agent-note fallback.
  */
-export async function plan(input: PlanAndActInput): Promise<PlanAndActResult> {
-  const { goal, budget, facts, seedPatches = [], planner, options, initialState } = input;
+export async function plan(input: PlanInput): Promise<PlanAndActResult> {
+  const { seedPatches = [], facts, planner, prompt, options, initialState } = input;
   const baseState = initialState ? clone(initialState) : undefined;
   const engine = new ReasonState(options, baseState);
   const events: string[] = [];
@@ -84,30 +77,6 @@ export async function plan(input: PlanAndActInput): Promise<PlanAndActResult> {
   // Optional seeding (domain-agnostic)
   if (seedPatches.length > 0) {
     applyStep(seedPatches, "Seed patches");
-  }
-  if (goal !== undefined) {
-    const hasGoal = Boolean(engine.snapshot.raw["goal"]);
-    applyStep(
-      [
-        {
-          op: hasGoal ? "replace" : "add",
-          path: "/raw/goal",
-          value: { id: "goal", type: "planning", summary: `Plan for ${goal}`, details: { destination: goal, budget } }
-        },
-        { op: hasGoal ? "replace" : "add", path: "/summary/goal", value: `Goal: ${goal}` }
-      ],
-      hasGoal ? "Update goal" : "Seed goal"
-    );
-  }
-  if (budget !== undefined) {
-    const hasBudget = Boolean(engine.snapshot.raw["budget"]);
-    applyStep(
-      [
-        { op: hasBudget ? "replace" : "add", path: "/raw/budget", value: { id: "budget", type: "fact", details: { amount: budget } } },
-        { op: hasBudget ? "replace" : "add", path: "/summary/budget", value: `Budget: ${budget}` }
-      ],
-      hasBudget ? "Update budget" : "Seed budget"
-    );
   }
   if (!engine.snapshot.summary?.["agent-note"]) {
     applyStep([{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }], "Seed agent note");
@@ -164,10 +133,10 @@ export async function plan(input: PlanAndActInput): Promise<PlanAndActResult> {
     }
   }
 
-  await runPlanTurn("Plan turn 1", DEFAULT_PLAN_PROMPT(goal, budget));
+  await runPlanTurn("Plan turn 1", prompt ?? DEFAULT_PLAN_PROMPT);
   const hasBlockers = (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
   if (!planPatches || hasBlockers) {
-    await runPlanTurn("Plan turn 2 (resolve blockers)", BLOCKER_PROMPT(goal, budget));
+    await runPlanTurn("Plan turn 2 (resolve blockers)", prompt ?? BLOCKER_PROMPT);
   }
 
   // Fallback agent-note if model skipped it

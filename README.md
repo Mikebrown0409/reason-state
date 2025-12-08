@@ -18,7 +18,10 @@ npm run dev
 import { plan } from "reason-state/agent/plan.js";
 
 const res = await plan({
-  goal: "Refactor payment module",
+  seedPatches: [
+    { op: "add", path: "/raw/task", value: { id: "task", type: "planning", summary: "Refactor payment module" } },
+    { op: "add", path: "/summary/task", value: "Refactor payment module" }
+  ],
   facts: [{ summary: "Use TypeScript" }]
 });
 console.log(res.agentMessage);        // agent note (always present; fallback if model skips)
@@ -78,7 +81,7 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 
 ## Dev API surface (current)
 - `ReasonState` — governed state + applyPatchesWithCheckpoint/replayFromLog.
-- `plan` — default plan helper (prompt baked, agent-note fallback; plan-only). `planAndAct` remains as a deprecated alias.
+- `plan` — default plan helper (prompt baked, agent-note fallback; plan-only). `planAndAct` remains as a deprecated alias. Provide `seedPatches` and optional `facts`; inject a custom `planner` if desired.
 - `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree`.
 - `contextBuilder.buildContext` — deterministic summaries-only context.
 - `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules); plug your own planner via `planner` in `plan` if desired.
