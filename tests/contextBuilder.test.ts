@@ -37,8 +37,9 @@ describe("buildContext", () => {
     const ctx2 = buildContext(state, { includeTimeline: false, buckets: [{ label: "Facts", nodeTypes: ["fact"] }] });
     expect(ctx1).toBe(ctx2);
     const factsSection = ctx1.split("\n").filter((l) => l.startsWith("- fact"));
-    expect(factsSection[0]).toContain("factA");
-    expect(factsSection[1]).toContain("factB");
+    // Dirty fact should come first
+    expect(factsSection[0]).toContain("factB");
+    expect(factsSection[1]).toContain("factA");
   });
 
   it("respects topK in buckets", () => {
@@ -47,8 +48,8 @@ describe("buildContext", () => {
       includeTimeline: false,
       buckets: [{ label: "Facts", nodeTypes: ["fact"], topK: 1 }]
     });
-    expect(ctx).toContain("factA");
-    expect(ctx).not.toContain("factB");
+    expect(ctx).toContain("factB"); // dirty fact prioritized
+    expect(ctx).not.toContain("factA");
   });
 
   it("truncates to maxChars", () => {
@@ -69,6 +70,44 @@ describe("buildContext", () => {
     const state = makeState();
     const ctx = buildContext(state);
     expect(ctx).not.toContain("destination");
+  });
+
+  it("prioritizes dirty, then assumptions, then unknowns, then facts", () => {
+    const state = makeState();
+    state.raw.assump = { id: "assump", type: "assumption", summary: "maybe", assumptionStatus: "valid" };
+    state.raw.factB.dirty = true;
+    state.raw.u2 = { id: "u2", type: "unknown", summary: "need dates 2" };
+    const ctx = buildContext(state, { includeTimeline: false, buckets: [{ label: "All", nodeTypes: ["fact", "assumption", "unknown"] }] });
+    const lines = ctx.split("\n").filter((l) => l.startsWith("-"));
+    expect(lines[0]).toContain("factB"); // dirty first
+    expect(lines[1]).toContain("assump"); // then assumption
+    // unknowns after assumptions
+    expect(lines.slice(2).some((l) => l.includes("u1"))).toBe(true);
+    expect(lines.slice(2).some((l) => l.includes("u2"))).toBe(true);
+  });
+
+  it("is deterministic under truncation", () => {
+    const state = makeState();
+    const ctx1 = buildContext(state, { maxChars: 80 });
+    const ctx2 = buildContext(state, { maxChars: 80 });
+    expect(ctx1).toBe(ctx2);
+    expect(ctx1.length).toBeLessThanOrEqual(80);
+  });
+
+  it("honors custom buckets and timeline tail together", () => {
+    const state = makeState();
+    const ctx = buildContext(state, {
+      buckets: [{ label: "Only facts", nodeTypes: ["fact"] }],
+      includeTimeline: true,
+      timelineTail: 1
+    });
+    expect(ctx).toContain("## Only facts");
+    expect(ctx).toContain("factA");
+    expect(ctx).not.toContain("goal");
+    // timeline should include only the last entry
+    const timelineLines = ctx.split("\n").filter((l) => l.startsWith("- 0:"));
+    expect(timelineLines.length).toBe(1);
+    expect(timelineLines[0]).toContain("/raw/unknown1");
   });
 });
 

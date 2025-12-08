@@ -20,8 +20,7 @@ import { planAndAct } from "reason-state/agent/planAndAct.js";
 const res = await planAndAct({
   goal: "Plan Tokyo trip",
   budget: 4000,
-  facts: [{ summary: "Allergic to sushi" }],
-  bookingDates: { startDate: "2025-12-10", endDate: "2025-12-15" }
+  facts: [{ summary: "Allergic to sushi" }]
 });
 console.log(res.agentMessage);        // agent note (always present; fallback if model skips)
 console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
@@ -32,8 +31,8 @@ console.log(res.history.at(-1)?.state); // governed state (raw + summaries)
 import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/api/facade.js";
 ```
 - `addNode/updateNode`: validated, append-only patches.
-- `recompute`: semantic plan+act (uses built-in prompt, agent-note fallback, booking governance).
-- `rollbackSubtree`: temporal/tool replay for a specific node id.
+- `recompute`: semantic plan+act (uses built-in prompt, agent-note fallback).
+- `rollbackSubtree`: temporal/tool replay for a specific node id (you supply the tool).
 
 ## What’s in the box
 - JSON-first governed graph: raw vs summary, lineage, timestamps, edges (`depends_on`, `contradicts`, `temporalBefore/After`), no deletes.
@@ -41,26 +40,25 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 - Governance: dirty/unknown gating, dependency/temporal blocking, contradiction detection, self-heal/rollback helpers.
 - Context builder: summaries-only, deterministic ordering, prioritizes dirty/new/assumptions, token budgeted.
 - Replay/time-travel: NDJSON append-only log + checkpoints; `replayFromLog` deterministic rebuild.
-- Tools: Grok 4.1 planner (strict prompt/validation/backoff), X search (fails loud w/o token), real-ish booking with calendar clash + Stripe-test + governance gating.
-- Default agent wrapper: `planAndAct` with built-in prompt, agent-note fallback, booking supersede, single-call signature.
+- Tools: Grok 4.1 planner (strict prompt/validation/backoff), X search (fails loud w/o token).
+- Default agent wrapper: `planAndAct` with built-in prompt and agent-note fallback (plan-only). Example tools (mock booking, X) live in `examples/` and are not shipped.
 
 ## File map
 - `src/engine`: core ReasonState, types, storage, reconciliation, replay.
 - `src/tools`: `grokChat` (planner integration). Example tools (`mockBooking`, `xSearch`) live in `examples/` and are not shipped by default.
 - `src/context`: context builder.
-- `src/agent/planAndAct.ts`: default helper (plan+act, fallback).
+- `src/agent/planAndAct.ts`: default helper (plan-only, fallback).
 - `src/api/facade.ts`: minimal facade (add/update/recompute/rollback).
 - `examples/agents`: dag/simple examples; example tools.
 - `demo`: DemoApp (rollback/recompute/diff/replay UI).
 
 ## Demo flow
 - Plan trip → add facts → semantic recompute (agent note updates, diff view).
-- Date clash → rollback subtree (temporal/tool), supersede stale blocked bookings.
+- Example booking tool (mock) used in demo agent to showcase governance; not shipped in package.
 - Replay & verify: rebuild from log and show hash match/badges.
 
 ## Notes
 - No fallbacks: missing keys error loudly (Grok/X).
-- Calendar holds: mock booking enforces clash; supersede clears stale blocked nodes; identical hold reuse allowed.
 - Governance first: actions blocked on unknown/dirty/deps/temporal; rollback/recompute provided.
 
 ## Env
@@ -72,7 +70,6 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 ## Verified behaviors
 - Grok 4.1 non-reasoning with strict prompt/validation/backoff; no details allowed; add/replace only.
 - Summaries-only context; dirty/new/assumptions prioritized; no raw details to model.
-- Booking tool gates unknowns, missing dates, and date clashes; supersede on success.
 - Determinism: replay from NDJSON log matches live state; replay badge shows patch count and match.
 - No silent fallbacks: missing Grok/X keys throw.
 
@@ -82,7 +79,7 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 
 ## Dev API surface (current)
 - `ReasonState` — governed state + applyPatchesWithCheckpoint/replayFromLog.
-- `planAndAct` — default plan+act wrapper (prompt baked, agent-note fallback, booking).
+- `planAndAct` — default plan wrapper (prompt baked, agent-note fallback; plan-only).
 - `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree`.
 - `contextBuilder.buildContext` — deterministic summaries-only context.
 - `grokChat.grokPlanWithContext` — validated Grok call (strict patch rules).

@@ -40,9 +40,9 @@ describe("integration: simple agent with log replay", () => {
     // Token-savings proxy: replay should not add new patches
     expect(replayed.history.length).toBe(patches.length);
 
-    // Booking should be blocked due to calendar clash (governance signal)
+    // In plan-only mode with missing dates, booking is skipped; ensure no booking nodes exist
     const booking = Object.values(replayed.raw).find((n) => n.id.startsWith("booking-"));
-    expect(booking?.status).toBe("blocked");
+    expect(booking).toBeUndefined();
 
     // Governance: nodes carry timestamps and statuses for assertions
     const goal = replayed.raw.goal;

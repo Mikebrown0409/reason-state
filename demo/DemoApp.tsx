@@ -5,8 +5,9 @@ import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
 import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
 import { runDagAgent } from "../examples/agents/dagAgent.js";
-import { planAndAct } from "../src/agent/planAndAct.js";
+import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
 import { resetCalendarHolds } from "../src/tools/mockBooking.js";
+import { mockBooking } from "../src/tools/mockBooking.js";
 import confetti from "canvas-confetti";
 
 type HistoryEntry = { state: EchoState; label: string; idx: number };
@@ -85,13 +86,15 @@ export function DemoApp() {
             },
             initialState
           )
-        : planAndAct({
-            goal: q,
-            budget: b,
-            facts: injected,
-            bookingDates: startDate && endDate ? { startDate, endDate } : undefined,
+        : runDemoAgent(
+            q,
+            b,
+            injected,
+            {
+              bookingDates: startDate && endDate ? { startDate, endDate } : undefined
+            },
             initialState
-          });
+          );
     runner.then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);

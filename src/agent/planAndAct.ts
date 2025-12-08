@@ -1,13 +1,11 @@
 import { ReasonState } from "../engine/ReasonState.js";
 import type { EchoState, Patch, ReasonStateOptions } from "../engine/types.js";
 import { grokPlanWithContext, type GrokPlanResult } from "../tools/grokChat.js";
-import { mockBooking } from "../tools/mockBooking.js";
 
 export type PlanAndActInput = {
   goal: string;
   budget: number;
   facts?: Array<{ summary: string }>;
-  bookingDates?: { startDate: string; endDate: string };
   options?: ReasonStateOptions;
   initialState?: EchoState;
 };
@@ -50,7 +48,7 @@ const BLOCKER_PROMPT = (goal: string, budget: number) =>
  * planAndAct: minimal, governed wrapper with built-in prompt and deterministic agent-note fallback.
  */
 export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResult> {
-  const { goal, budget, facts, bookingDates, options, initialState } = input;
+  const { goal, budget, facts, options, initialState } = input;
   const baseState = initialState ? clone(initialState) : undefined;
   const engine = new ReasonState(options, baseState);
   const events: string[] = [];
@@ -150,113 +148,8 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
     agentNote = engine.snapshot.summary?.["agent-note"];
   }
 
-  // If dates missing, short-circuit booking
-  if (!bookingDates?.startDate || !bookingDates?.endDate) {
-    const notePatch: Patch = {
-      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
-      path: "/summary/agent-note",
-      value: agentNote || "Need start/end dates to proceed with booking."
-    };
-    applyStep([notePatch], "Booking skipped (dates missing)");
-    return {
-      history,
-      events,
-      plan: planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n"),
-      planPatches,
-      planMeta,
-      planMetaHistory,
-      planMessages,
-      agentMessage: agentNote || "Need start/end dates to proceed with booking."
-    };
-  }
-
-  // Booking
-  if (!engine.canExecute("action")) {
-    events.push("Booking skipped: blocked by governance (unknown/dirty)");
-    return {
-      history,
-      events,
-      plan: planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n"),
-      planPatches,
-      planMeta,
-      planMetaHistory,
-      planMessages,
-      agentMessage: agentNote
-    };
-  }
-
-  const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
-  const reuseExisting =
-    existingBookingId &&
-    (engine.snapshot.raw[existingBookingId]?.details as any)?.destination === goal &&
-    (engine.snapshot.raw[existingBookingId]?.details as any)?.budget === budget;
-  const bookingId = reuseExisting
-    ? existingBookingId!
-    : `booking-${goal}-${bookingDates?.startDate ?? "nodates"}-${bookingDates?.endDate ?? "nodates"}`;
-
-  const bookingPatches = await mockBooking({
-    id: bookingId,
-    destination: goal,
-    budget,
-    unknowns: engine.snapshot.unknowns,
-    startDate: bookingDates?.startDate,
-    endDate: bookingDates?.endDate
-  });
-  const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
-  applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
-
-  const bookingNode = (bookingPatches.find((p) => (p.value as any)?.type === "action")?.value ??
-    bookingPatches[0]?.value) as any;
-  const agentMessageFromBooking = bookingNode
-    ? bookingBlocked
-      ? bookingNode?.details?.conflict
-        ? `Booking blocked: dates clash (${bookingNode.details.conflict.startDate}–${bookingNode.details.conflict.endDate}). Try new dates.`
-        : bookingNode?.details?.missing
-          ? `Booking blocked: missing ${bookingNode.details.missing.join(", ")}.`
-          : bookingNode?.summary ?? "Booking blocked."
-      : `Booked for ${bookingNode?.details?.destination ?? goal} within budget ${bookingNode?.details?.budget ?? budget}.`
-    : "";
-  // Prefer the planning agent note; only fall back to booking message if none.
-  agentNote = agentNote || agentMessageFromBooking;
-
-  // On success, supersede older blocked bookings for same destination
-  if (!bookingBlocked) {
-    const supersede: Patch[] = [];
-    Object.entries(engine.snapshot.raw ?? {}).forEach(([id, node]) => {
-      if (id === bookingId) return;
-      if (!id.startsWith("booking-")) return;
-      const destination = (node as any)?.details?.destination;
-      if (destination !== goal) return;
-      if ((node as any)?.status !== "blocked") return;
-      supersede.push({
-        op: "replace",
-        path: `/raw/${id}`,
-        value: { ...(node as any), status: "resolved", summary: `Superseded by ${bookingId}`, dirty: false, updatedAt: new Date().toISOString() }
-      });
-      if (engine.snapshot.summary?.[id]) {
-        supersede.push({
-          op: "replace",
-          path: `/summary/${id}`,
-          value: `Booking ${id} superseded by ${bookingId}`
-        });
-      }
-    });
-    if (supersede.length > 0) {
-      applyStep(supersede, "Supersede old bookings");
-    }
-  }
-
-  // Refresh agent-note on booking outcome
-  const notePatch: Patch = {
-    op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
-    path: "/summary/agent-note",
-    value: agentNote || agentMessageFromBooking || "Booking resolved."
-  };
-  applyStep([notePatch], bookingBlocked ? "Update agent note (blocked)" : "Refresh agent note");
-  agentNote = engine.snapshot.summary?.["agent-note"];
-
   const planSummary = planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n");
-  const resolvedAgentMessage = agentNote && agentNote !== "Agent note: pending" ? agentNote : agentMessageFromBooking;
+  const resolvedAgentMessage = agentNote && agentNote !== "Agent note: pending" ? agentNote : "";
 
   return {
     history,
