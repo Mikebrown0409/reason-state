@@ -5,27 +5,11 @@ import type { EchoState } from "../src/engine/types.js";
 type Task = {
   goal: string;
   facts: string[];
+  assumptions?: string[];
   unknowns?: string[];
+  noise?: number;
   required: string[];
 };
-
-const tasks: Task[] = [
-  {
-    goal: "Refactor payment module",
-    facts: ["Use TypeScript", "Add tests", "Avoid breaking API"],
-    required: ["refactor", "payment", "tests"],
-  },
-  {
-    goal: "Add logging to auth service",
-    facts: ["Avoid PII", "Use structured logs", "Include correlation id"],
-    required: ["log", "auth"],
-  },
-  {
-    goal: "Migrate DB config",
-    facts: ["Use env vars", "Stage rollout", "Backup first"],
-    required: ["db", "env", "backup"],
-  },
-];
 
 function makeState(task: Task): EchoState {
   const raw: Record<string, any> = {
@@ -34,20 +18,70 @@ function makeState(task: Task): EchoState {
   task.facts.forEach((f, i) => {
     raw[`fact-${i}`] = { id: `fact-${i}`, type: "fact", summary: f };
   });
+  (task.assumptions ?? []).forEach((a, i) => {
+    raw[`assump-${i}`] = {
+      id: `assump-${i}`,
+      type: "assumption",
+      summary: a,
+      assumptionStatus: "valid",
+      status: "open",
+    };
+  });
   (task.unknowns ?? []).forEach((u, i) => {
     raw[`unknown-${i}`] = { id: `unknown-${i}`, type: "unknown", summary: u };
   });
+  const noiseCount = task.noise ?? 0;
+  for (let i = 0; i < noiseCount; i++) {
+    raw[`noise-${i}`] = {
+      id: `noise-${i}`,
+      type: "fact",
+      summary: `noise-${i} filler detail that should be deprioritized`,
+      details: { filler: true },
+    };
+  }
   return {
     raw,
     summary: {},
     history: [],
     unknowns: (task.unknowns ?? []).map((_, i) => `unknown-${i}`),
-    assumptions: [],
+    assumptions: (task.assumptions ?? []).map((_, i) => `assump-${i}`),
   };
 }
 
-describe("Memory benchmark: raw dump vs buildContext (length + content)", () => {
-  it("compares lengths and coverage of required terms", () => {
+function coverage(text: string, required: string[]): number {
+  const lower = text.toLowerCase();
+  return required.filter((r) => lower.includes(r.toLowerCase())).length;
+}
+
+describe("Memory benchmark: raw dump vs buildContext (length + coverage + truncation)", () => {
+  const tasks: Task[] = [
+    {
+      goal: "Refactor payment module",
+      facts: ["Use TypeScript", "Add tests", "Avoid breaking API"],
+      assumptions: ["Maybe split services"],
+      unknowns: ["Budget limit unknown"],
+      noise: 15,
+      required: ["refactor", "payment", "tests"],
+    },
+    {
+      goal: "Add logging to auth service",
+      facts: ["Avoid PII", "Use structured logs", "Include correlation id"],
+      assumptions: ["May need rate limits"],
+      unknowns: [],
+      noise: 20,
+      required: ["log", "auth", "structured"],
+    },
+    {
+      goal: "Migrate DB config",
+      facts: ["Use env vars", "Stage rollout", "Backup first", "Notify SRE"],
+      assumptions: ["Switch to managed service?"],
+      unknowns: ["Exact cutover window"],
+      noise: 30,
+      required: ["db", "env", "backup", "sre"],
+    },
+  ];
+
+  it("shows buildContext is shorter and retains required coverage under noise", () => {
     tasks.forEach((task) => {
       const state = makeState(task);
       const rawDump = JSON.stringify(state.raw);
@@ -55,19 +89,34 @@ describe("Memory benchmark: raw dump vs buildContext (length + content)", () => 
 
       const rawLen = rawDump.length;
       const ctxLen = ctx.length;
+      const rawCov = coverage(rawDump, task.required);
+      const ctxCov = coverage(ctx, task.required);
 
-      const rawCoverage = task.required.filter((r) => rawDump.toLowerCase().includes(r)).length;
-      const ctxCoverage = task.required.filter((r) => ctx.toLowerCase().includes(r)).length;
-
-      // Log for inspection; keep assertions loose to avoid flakiness.
       console.log(
-        `[MemoryBench] goal="${task.goal}" rawLen=${rawLen} ctxLen=${ctxLen} rawCov=${rawCoverage}/${task.required.length} ctxCov=${ctxCoverage}/${task.required.length}`
+        `[MemoryBench-noise] goal="${task.goal}" rawLen=${rawLen} ctxLen=${ctxLen} rawCov=${rawCov}/${task.required.length} ctxCov=${ctxCov}/${task.required.length}`
       );
 
-      // Expect context to be shorter than raw dump in most cases.
-      expect(ctxLen).toBeLessThanOrEqual(rawLen);
-      // Expect coverage to be at least as good as raw (summaries should keep key terms).
-      expect(ctxCoverage).toBeGreaterThanOrEqual(rawCoverage);
+      expect(ctxLen).toBeLessThan(rawLen);
+      expect(ctxCov).toBeGreaterThanOrEqual(rawCov);
+      expect(ctxCov).toBeGreaterThan(0);
+    });
+  });
+
+  it("retains key terms when raw dump is truncated", () => {
+    tasks.forEach((task) => {
+      const state = makeState(task);
+      const rawDump = JSON.stringify(state.raw);
+      const truncatedRaw = rawDump.slice(0, 400); // simulate naive truncation
+      const ctx = buildContext(state, { includeTimeline: false, maxChars: 400 });
+
+      const rawCov = coverage(truncatedRaw, task.required);
+      const ctxCov = coverage(ctx, task.required);
+
+      console.log(
+        `[MemoryBench-trunc] goal="${task.goal}" truncRawLen=400 ctxLen=${ctx.length} rawCov=${rawCov}/${task.required.length} ctxCov=${ctxCov}/${task.required.length}`
+      );
+
+      expect(ctxCov).toBeGreaterThanOrEqual(rawCov);
     });
   });
 });
