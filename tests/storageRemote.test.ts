@@ -79,4 +79,3 @@ describe("createRemoteStorageDriver", () => {
     expect(fetchMock).toHaveBeenCalledWith(`${baseUrl}/log`);
   });
 });
-

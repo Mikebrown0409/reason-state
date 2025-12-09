@@ -33,7 +33,9 @@ function resolveApiKey(opts: OpenAICompatibleOptions): string {
       ? (import.meta as any)?.env?.VITE_OPENAI_API_KEY
       : undefined);
   if (!key || key.trim().length === 0) {
-    throw new Error("OPENAI_API_KEY (or VITE_OPENAI_API_KEY) is required for openaiCompatiblePlanner");
+    throw new Error(
+      "OPENAI_API_KEY (or VITE_OPENAI_API_KEY) is required for openaiCompatiblePlanner"
+    );
   }
   return key;
 }
@@ -112,4 +114,3 @@ export async function openaiCompatiblePlanWithContext(
   }
   throw new Error("openaiCompatiblePlanWithContext unreachable");
 }
-
