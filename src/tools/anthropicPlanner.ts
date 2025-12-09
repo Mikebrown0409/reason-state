@@ -20,7 +20,9 @@ function getKey(): string {
       ? (import.meta as any)?.env?.VITE_ANTHROPIC_API_KEY
       : undefined);
   if (!key || key.trim().length === 0) {
-    throw new Error("ANTHROPIC_API_KEY (or VITE_ANTHROPIC_API_KEY) is required for anthropicPlanner");
+    throw new Error(
+      "ANTHROPIC_API_KEY (or VITE_ANTHROPIC_API_KEY) is required for anthropicPlanner"
+    );
   }
   return key;
 }
@@ -103,4 +105,3 @@ export async function anthropicPlanWithContext(
   }
   throw new Error("anthropicPlanWithContext unreachable");
 }
-

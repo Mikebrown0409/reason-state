@@ -11,7 +11,11 @@ import type { Checkpoint, EchoState, Patch, StorageDriver } from "./types.js";
 export function createRemoteStorageDriver(baseUrl: string): StorageDriver {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
 
-  async function saveCheckpoint(state: EchoState, _dbPath?: string, turnId?: string): Promise<Checkpoint> {
+  async function saveCheckpoint(
+    state: EchoState,
+    _dbPath?: string,
+    turnId?: string
+  ): Promise<Checkpoint> {
     const res = await fetch(`${normalizedBase}/checkpoints`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -71,4 +75,3 @@ export function createRemoteStorageDriver(baseUrl: string): StorageDriver {
     readLog,
   };
 }
-

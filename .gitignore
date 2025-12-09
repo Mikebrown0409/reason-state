@@ -21,3 +21,7 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+locomo10.json
+/benchmarks/longmemeval/data/locomo10.json
+/benchmarks/longmemeval/data/locomo50.json
+/benchmarks/memory-wars/results.json

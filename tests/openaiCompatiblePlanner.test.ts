@@ -48,4 +48,3 @@ describe("openaiCompatiblePlanWithContext", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
-

@@ -83,4 +83,3 @@ describe("planner adapters (OpenAI/Anthropic)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
-
