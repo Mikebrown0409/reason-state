@@ -77,7 +77,14 @@ import {
   propagateDirty,
 } from "./reconciliation.js";
 import { appendToLogSync, loadCheckpoint, readLog, saveCheckpoint } from "./storage.js";
-import type { EchoState, Patch, Checkpoint, ReasonStateOptions, StateNode } from "./types.js";
+import type {
+  EchoState,
+  Patch,
+  Checkpoint,
+  ReasonStateOptions,
+  StateNode,
+  StorageDriver,
+} from "./types.js";
 import { createEmptyState } from "./types.js";
 import { validatePatch } from "./patchSchema.js";
 
@@ -85,9 +92,16 @@ export class ReasonState {
   private state: EchoState;
   private readonly options: ReasonStateOptions;
   private patchesSinceCheckpoint = 0;
+  private readonly storage: StorageDriver;
 
   constructor(options: ReasonStateOptions = {}, initialState?: EchoState) {
     this.options = options;
+    this.storage = options.storage ?? {
+      saveCheckpoint,
+      loadCheckpoint,
+      appendToLogSync,
+      readLog,
+    };
     this.state = initialState ?? {
       raw: {},
       summary: {},
@@ -109,7 +123,7 @@ export class ReasonState {
     this.state = applyPatches(patches, this.state);
     this.patchesSinceCheckpoint += patches.length;
     if (this.options.logPath) {
-      appendToLogSync(patches, this.options.logPath);
+      this.storage.appendToLogSync(patches, this.options.logPath);
     }
     return this.state;
   }
@@ -125,7 +139,7 @@ export class ReasonState {
   }
 
   async checkpoint(turnId?: string): Promise<Checkpoint> {
-    const cp = await saveCheckpoint(this.state, this.options.dbPath, turnId);
+    const cp = await this.storage.saveCheckpoint(this.state, this.options.dbPath, turnId);
     this.state.checkpointId = cp.id;
     this.patchesSinceCheckpoint = 0;
     return cp;
@@ -147,7 +161,7 @@ export class ReasonState {
   }
 
   async restore(id: string): Promise<EchoState> {
-    const cp = await loadCheckpoint(id, this.options.dbPath);
+    const cp = await this.storage.loadCheckpoint(id, this.options.dbPath);
     this.state = cp.state;
     return this.state;
   }
@@ -157,7 +171,7 @@ export class ReasonState {
    * Optionally starts from an empty state or provided base.
    */
   async replayFromLog(logPath?: string, baseState?: EchoState): Promise<EchoState> {
-    const patches = await readLog(logPath);
+    const patches = await this.storage.readLog(logPath);
     this.state = replayHistory(patches, baseState ?? createEmptyState());
     return this.state;
   }

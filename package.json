@@ -1,6 +1,6 @@
 {
   "name": "reason-state",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "private": false,
   "main": "./src/api/facade.ts",
@@ -13,7 +13,11 @@
     "./api": "./src/api/facade.ts",
     "./context": "./src/context/contextBuilder.ts",
     "./engine": "./src/engine/ReasonState.ts",
-    "./tools/grokChat": "./src/tools/grokChat.ts"
+    "./tools/grokChat": "./src/tools/grokChat.ts",
+    "./tools/openaiPlanner": "./src/tools/openaiPlanner.ts",
+    "./tools/anthropicPlanner": "./src/tools/anthropicPlanner.ts",
+    "./tools/openaiCompatiblePlanner": "./src/tools/openaiCompatiblePlanner.ts",
+    "./engine/storageRemote": "./src/engine/storageRemote.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -25,6 +29,9 @@
     "src/engine/",
     "src/context/",
     "src/tools/grokChat.ts",
+    "src/tools/openaiPlanner.ts",
+    "src/tools/anthropicPlanner.ts",
+    "src/tools/openaiCompatiblePlanner.ts",
     "README.md"
   ],
   "scripts": {

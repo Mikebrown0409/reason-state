@@ -59,11 +59,19 @@ export interface Checkpoint {
   turnId?: string;
 }
 
+export type StorageDriver = {
+  saveCheckpoint: (state: EchoState, dbPath?: string, turnId?: string) => Promise<Checkpoint>;
+  loadCheckpoint: (id: string, dbPath?: string) => Promise<Checkpoint>;
+  appendToLogSync: (patches: Patch[], logPath?: string) => void;
+  readLog: (logPath?: string) => Promise<Patch[]>;
+};
+
 export interface ReasonStateOptions {
   dbPath?: string;
   logPath?: string;
   checkpointInterval?: number;
   grok?: unknown;
+  storage?: StorageDriver;
 }
 
 // Helpers to make inline tests readable and provide a clean starting state.
