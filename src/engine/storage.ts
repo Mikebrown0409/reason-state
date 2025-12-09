@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import type { Checkpoint, EchoState, Patch } from "./types.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -15,7 +16,7 @@ export async function saveCheckpoint(
   dbPath = DEFAULT_DB,
   turnId?: string
 ): Promise<Checkpoint> {
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const createdAt = new Date().toISOString();
 
   // Use in-memory store for browser and for default ":memory:" to avoid per-connection SQLite isolation.
