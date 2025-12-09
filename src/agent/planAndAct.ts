@@ -1,16 +1,25 @@
 import { ReasonState } from "../engine/ReasonState.js";
 import type { EchoState, Patch, ReasonStateOptions } from "../engine/types.js";
 import { grokPlanWithContext, type GrokPlanResult } from "../tools/grokChat.js";
-import { mockBooking } from "../tools/mockBooking.js";
 
-export type PlanAndActInput = {
-  goal: string;
-  budget: number;
+export type PlannerResult = {
+  patches: Patch[];
+  attempts?: number;
+  lastError?: string;
+  raw?: string;
+};
+
+export type Planner = (state: EchoState, prompt: string) => Promise<PlannerResult>;
+
+export type PlanInput = {
+  seedPatches?: Patch[];
   facts?: Array<{ summary: string }>;
-  bookingDates?: { startDate: string; endDate: string };
+  planner?: Planner;
+  prompt?: string;
   options?: ReasonStateOptions;
   initialState?: EchoState;
 };
+export type PlanAndActInput = PlanInput;
 
 export type PlanAndActResult = {
   history: Array<{ state: EchoState; label: string }>;
@@ -22,6 +31,7 @@ export type PlanAndActResult = {
   planMessages?: string[];
   agentMessage?: string;
 };
+export type PlanResult = PlanAndActResult;
 
 function clone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
@@ -33,24 +43,28 @@ function describePatch(p: Patch): string {
   }
   if (p.path.startsWith("/raw/")) {
     const id = p.path.replace("/raw/", "");
-    const val = p.value as any;
-    const status = val?.status ? ` status=${val.status}` : "";
-    return `Upsert node ${id} (${val?.type ?? "node"})${status}`;
+    const val = p.value as { type?: string; status?: string } | string | number | undefined;
+    const status =
+      val && typeof val === "object" && "status" in val && val.status
+        ? ` status=${val.status}`
+        : "";
+    const type = val && typeof val === "object" && "type" in val && val.type ? val.type : "node";
+    return `Upsert node ${id} (${type})${status}`;
   }
   return `${p.op} ${p.path}`;
 }
 
-const DEFAULT_PLAN_PROMPT = (goal: string, budget: number) =>
-  `Create a concise plan for: ${goal}, budget ${budget}. Consider existing booking summaries; avoid overlapping dates with blocked/resolved bookings. If clashes exist, ask for new dates. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
+const DEFAULT_PLAN_PROMPT =
+  "Create a concise next-step plan given the current state. Consider existing summaries and avoid conflicts in dependencies. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).";
 
-const BLOCKER_PROMPT = (goal: string, budget: number) =>
-  `Resolve blockers/unknowns and refine plan for: ${goal}, budget ${budget}. Avoid overlapping dates with existing bookings; if clash, ask for new dates. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).`;
+const BLOCKER_PROMPT =
+  "Resolve blockers/unknowns and refine the plan given the current state. Avoid conflicts in dependencies; if blocked, surface the needed inputs. You must replace /summary/agent-note with <=200 char next step that reflects any new facts/assumptions (summaries only; no details).";
 
 /**
  * planAndAct: minimal, governed wrapper with built-in prompt and deterministic agent-note fallback.
  */
-export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResult> {
-  const { goal, budget, facts, bookingDates, options, initialState } = input;
+export async function plan(input: PlanInput): Promise<PlanAndActResult> {
+  const { seedPatches = [], facts, planner, prompt, options, initialState } = input;
   const baseState = initialState ? clone(initialState) : undefined;
   const engine = new ReasonState(options, baseState);
   const events: string[] = [];
@@ -64,28 +78,22 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
     events.push(label);
   };
 
-  // Seed goal/budget and agent note
-  const hasGoal = Boolean(engine.snapshot.raw["goal"]);
-  const hasBudget = Boolean(engine.snapshot.raw["budget"]);
-  const hasAgentNote = Boolean(engine.snapshot.summary?.["agent-note"]);
-  const seed: Patch[] = [
-    {
-      op: hasGoal ? "replace" : "add",
-      path: "/raw/goal",
-      value: { id: "goal", type: "planning", summary: `Plan for ${goal}`, details: { destination: goal, budget } }
-    },
-    { op: hasGoal ? "replace" : "add", path: "/summary/goal", value: `Goal: ${goal}` },
-    { op: hasBudget ? "replace" : "add", path: "/raw/budget", value: { id: "budget", type: "fact", details: { amount: budget } } },
-    { op: hasBudget ? "replace" : "add", path: "/summary/budget", value: `Budget: ${budget}` }
-  ];
-  if (!hasAgentNote) {
-    seed.push({ op: "add", path: "/summary/agent-note", value: "Agent note: pending" });
+  // Optional seeding (domain-agnostic)
+  if (seedPatches.length > 0) {
+    applyStep(seedPatches, "Seed patches");
   }
-  applyStep(seed, hasGoal || hasBudget ? "Update goal/budget" : `Seed goal (${budget.toLocaleString()} budget)`);
+  if (!engine.snapshot.summary?.["agent-note"]) {
+    applyStep(
+      [{ op: "add", path: "/summary/agent-note", value: "Agent note: pending" }],
+      "Seed agent note"
+    );
+  }
 
   // Inject facts/assumptions with summaries
   if (facts && facts.length > 0) {
-    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) => k.startsWith("input-")).length;
+    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) =>
+      k.startsWith("input-")
+    ).length;
     const factPatches: Patch[] = facts.flatMap((f, i) => {
       const id = `input-${existingInputs + i}`;
       return [
@@ -100,10 +108,10 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
             assumptionStatus: "valid",
             status: "open",
             sourceType: "user",
-            sourceId: id
-          }
+            sourceId: id,
+          },
         },
-        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` }
+        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` },
       ];
     });
     applyStep(factPatches, "Injected facts");
@@ -114,10 +122,18 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
   let planMeta: Omit<GrokPlanResult, "patches"> | undefined;
   let agentNote: string | undefined;
 
+  const plannerFn =
+    planner ?? (async (state: EchoState, prompt: string) => grokPlanWithContext(state, prompt));
+
   async function runPlanTurn(label: string, prompt: string) {
     try {
-      const planRes = await grokPlanWithContext(engine.snapshot, prompt);
-      planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
+      const planRes = await plannerFn(engine.snapshot, prompt);
+      planMetaHistory.push({
+        attempts: planRes.attempts ?? 0,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+        label,
+      });
       if (planRes.patches.length > 0) {
         planPatches = planRes.patches;
         applyStep(planRes.patches, label);
@@ -126,16 +142,22 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
       } else {
         events.push(`${label}: empty plan`);
       }
-      planMeta = { attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw };
+      planMeta = {
+        attempts: planRes.attempts ?? 0,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+      };
     } catch (err) {
       events.push(`${label}: Grok error ${String(err)}`);
     }
   }
 
-  await runPlanTurn("Plan turn 1", DEFAULT_PLAN_PROMPT(goal, budget));
-  const hasBlockers = (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
+  await runPlanTurn("Plan turn 1", prompt ?? DEFAULT_PLAN_PROMPT);
+  const hasBlockers =
+    (engine.snapshot.unknowns?.length ?? 0) > 0 ||
+    Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
   if (!planPatches || hasBlockers) {
-    await runPlanTurn("Plan turn 2 (resolve blockers)", BLOCKER_PROMPT(goal, budget));
+    await runPlanTurn("Plan turn 2 (resolve blockers)", prompt ?? BLOCKER_PROMPT);
   }
 
   // Fallback agent-note if model skipped it
@@ -144,119 +166,14 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: `Updated with new facts: ${factsText}`
+      value: `Updated with new facts: ${factsText}`,
     };
     applyStep([notePatch], "Agent note fallback (facts)");
     agentNote = engine.snapshot.summary?.["agent-note"];
   }
 
-  // If dates missing, short-circuit booking
-  if (!bookingDates?.startDate || !bookingDates?.endDate) {
-    const notePatch: Patch = {
-      op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
-      path: "/summary/agent-note",
-      value: agentNote || "Need start/end dates to proceed with booking."
-    };
-    applyStep([notePatch], "Booking skipped (dates missing)");
-    return {
-      history,
-      events,
-      plan: planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n"),
-      planPatches,
-      planMeta,
-      planMetaHistory,
-      planMessages,
-      agentMessage: agentNote || "Need start/end dates to proceed with booking."
-    };
-  }
-
-  // Booking
-  if (!engine.canExecute("action")) {
-    events.push("Booking skipped: blocked by governance (unknown/dirty)");
-    return {
-      history,
-      events,
-      plan: planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n"),
-      planPatches,
-      planMeta,
-      planMetaHistory,
-      planMessages,
-      agentMessage: agentNote
-    };
-  }
-
-  const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
-  const reuseExisting =
-    existingBookingId &&
-    (engine.snapshot.raw[existingBookingId]?.details as any)?.destination === goal &&
-    (engine.snapshot.raw[existingBookingId]?.details as any)?.budget === budget;
-  const bookingId = reuseExisting
-    ? existingBookingId!
-    : `booking-${goal}-${bookingDates?.startDate ?? "nodates"}-${bookingDates?.endDate ?? "nodates"}`;
-
-  const bookingPatches = await mockBooking({
-    id: bookingId,
-    destination: goal,
-    budget,
-    unknowns: engine.snapshot.unknowns,
-    startDate: bookingDates?.startDate,
-    endDate: bookingDates?.endDate
-  });
-  const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
-  applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
-
-  const bookingNode = (bookingPatches.find((p) => (p.value as any)?.type === "action")?.value ??
-    bookingPatches[0]?.value) as any;
-  const agentMessageFromBooking = bookingNode
-    ? bookingBlocked
-      ? bookingNode?.details?.conflict
-        ? `Booking blocked: dates clash (${bookingNode.details.conflict.startDate}–${bookingNode.details.conflict.endDate}). Try new dates.`
-        : bookingNode?.details?.missing
-          ? `Booking blocked: missing ${bookingNode.details.missing.join(", ")}.`
-          : bookingNode?.summary ?? "Booking blocked."
-      : `Booked for ${bookingNode?.details?.destination ?? goal} within budget ${bookingNode?.details?.budget ?? budget}.`
-    : "";
-  // Prefer the planning agent note; only fall back to booking message if none.
-  agentNote = agentNote || agentMessageFromBooking;
-
-  // On success, supersede older blocked bookings for same destination
-  if (!bookingBlocked) {
-    const supersede: Patch[] = [];
-    Object.entries(engine.snapshot.raw ?? {}).forEach(([id, node]) => {
-      if (id === bookingId) return;
-      if (!id.startsWith("booking-")) return;
-      const destination = (node as any)?.details?.destination;
-      if (destination !== goal) return;
-      if ((node as any)?.status !== "blocked") return;
-      supersede.push({
-        op: "replace",
-        path: `/raw/${id}`,
-        value: { ...(node as any), status: "resolved", summary: `Superseded by ${bookingId}`, dirty: false, updatedAt: new Date().toISOString() }
-      });
-      if (engine.snapshot.summary?.[id]) {
-        supersede.push({
-          op: "replace",
-          path: `/summary/${id}`,
-          value: `Booking ${id} superseded by ${bookingId}`
-        });
-      }
-    });
-    if (supersede.length > 0) {
-      applyStep(supersede, "Supersede old bookings");
-    }
-  }
-
-  // Refresh agent-note on booking outcome
-  const notePatch: Patch = {
-    op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
-    path: "/summary/agent-note",
-    value: agentNote || agentMessageFromBooking || "Booking resolved."
-  };
-  applyStep([notePatch], bookingBlocked ? "Update agent note (blocked)" : "Refresh agent note");
-  agentNote = engine.snapshot.summary?.["agent-note"];
-
   const planSummary = planMessages?.join("\n") ?? planPatches?.map(describePatch).join("\n");
-  const resolvedAgentMessage = agentNote && agentNote !== "Agent note: pending" ? agentNote : agentMessageFromBooking;
+  const resolvedAgentMessage = agentNote && agentNote !== "Agent note: pending" ? agentNote : "";
 
   return {
     history,
@@ -266,7 +183,9 @@ export async function planAndAct(input: PlanAndActInput): Promise<PlanAndActResu
     planMeta,
     planMetaHistory,
     planMessages,
-    agentMessage: resolvedAgentMessage
+    agentMessage: resolvedAgentMessage,
   };
 }
 
+// Deprecated alias for compatibility
+export const planAndAct = plan;

@@ -1,4 +1,11 @@
-const ALLOWED_NODE_TYPES = new Set(["fact", "assumption", "unknown", "action", "planning", "decision"]);
+const ALLOWED_NODE_TYPES = new Set([
+  "fact",
+  "assumption",
+  "unknown",
+  "action",
+  "planning",
+  "decision",
+]);
 const ALLOWED_STATUS = new Set(["open", "blocked", "resolved", "dirty"]);
 const ALLOWED_ASSUMPTION_STATUS = new Set(["valid", "invalid", "retracted", "expired", "resolved"]);
 
@@ -25,10 +32,16 @@ function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown
   if (v.status !== undefined && !ALLOWED_STATUS.has(v.status as string)) {
     throw new Error(`invalid status for ${id}: ${String(v.status)}`);
   }
-  if (v.assumptionStatus !== undefined && !ALLOWED_ASSUMPTION_STATUS.has(v.assumptionStatus as string)) {
+  if (
+    v.assumptionStatus !== undefined &&
+    !ALLOWED_ASSUMPTION_STATUS.has(v.assumptionStatus as string)
+  ) {
     throw new Error(`invalid assumptionStatus for ${id}: ${String(v.assumptionStatus)}`);
   }
-  if (v.details !== undefined && (typeof v.details !== "object" || v.details === null || Array.isArray(v.details))) {
+  if (
+    v.details !== undefined &&
+    (typeof v.details !== "object" || v.details === null || Array.isArray(v.details))
+  ) {
     throw new Error(`details must be an object for ${id}`);
   }
 
@@ -49,7 +62,7 @@ function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown
     "parentId",
     "children",
     "createdAt",
-    "updatedAt"
+    "updatedAt",
   ]);
   for (const key of Object.keys(v)) {
     if (!allowedKeys.has(key)) {
@@ -57,15 +70,14 @@ function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown
     }
   }
 }
-import { applyReconciliation, canExecute, detectContradictions, propagateDirty } from "./reconciliation.js";
+import {
+  applyReconciliation,
+  canExecute,
+  detectContradictions,
+  propagateDirty,
+} from "./reconciliation.js";
 import { appendToLogSync, loadCheckpoint, readLog, saveCheckpoint } from "./storage.js";
-import type {
-  EchoState,
-  Patch,
-  Checkpoint,
-  ReasonStateOptions,
-  StateNode
-} from "./types.js";
+import type { EchoState, Patch, Checkpoint, ReasonStateOptions, StateNode } from "./types.js";
 import { createEmptyState } from "./types.js";
 import { validatePatch } from "./patchSchema.js";
 
@@ -76,15 +88,13 @@ export class ReasonState {
 
   constructor(options: ReasonStateOptions = {}, initialState?: EchoState) {
     this.options = options;
-    this.state =
-      initialState ??
-      {
-        raw: {},
-        summary: {},
-        assumptions: [],
-        unknowns: [],
-        history: []
-      };
+    this.state = initialState ?? {
+      raw: {},
+      summary: {},
+      assumptions: [],
+      unknowns: [],
+      history: [],
+    };
   }
 
   get snapshot(): EchoState {
@@ -215,7 +225,7 @@ export function retractAssumption(id: string, state: EchoState): EchoState {
     op: "replace",
     path: `/raw/${id}`,
     value: node,
-    reason: "retractAssumption"
+    reason: "retractAssumption",
   });
   return applyReconciliation(propagateDirty(next, [id]));
 }
@@ -240,7 +250,7 @@ export async function selfHealAndReplay(
       op: "replace",
       path: `/raw/${id}`,
       value: node,
-      reason: "selfHeal:contradiction"
+      reason: "selfHeal:contradiction",
     });
   }
   const healed = applyPatches(patches, base);
@@ -288,7 +298,10 @@ function normalizePatchIds(
     const exists =
       bucket === "raw"
         ? knownRaw.has(pathId) || stagedRaw.has(pathId)
-        : knownSummary.has(pathId) || stagedSummary.has(pathId) || knownRaw.has(pathId) || stagedRaw.has(pathId);
+        : knownSummary.has(pathId) ||
+          stagedSummary.has(pathId) ||
+          knownRaw.has(pathId) ||
+          stagedRaw.has(pathId);
     if (!exists) {
       throw new Error(`replace target does not exist: ${patch.path}`);
     }
@@ -338,7 +351,8 @@ function resyncLists(state: EchoState): void {
 function stampTimestamps(value: unknown, prior?: StateNode): StateNode {
   const now = new Date().toISOString();
   const base: StateNode =
-    (value && typeof value === "object" ? (value as StateNode) : ({} as StateNode)) ?? ({} as StateNode);
+    (value && typeof value === "object" ? (value as StateNode) : ({} as StateNode)) ??
+    ({} as StateNode);
   if (!prior?.createdAt) {
     base.createdAt = base.createdAt ?? now;
   } else {
@@ -353,4 +367,3 @@ function stampTimestamps(value: unknown, prior?: StateNode): StateNode {
   base.updatedAt = updated;
   return base;
 }
-

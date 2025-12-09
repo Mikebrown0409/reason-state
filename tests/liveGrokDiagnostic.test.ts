@@ -21,7 +21,7 @@ describe("live grok diagnostic (small context)", () => {
         id: "goal",
         type: "planning",
         summary: "Plan for Tokyo",
-        details: { destination: "Tokyo", budget: 4000 }
+        details: { destination: "Tokyo", budget: 4000 },
       };
       state.summary["goal"] = "Goal: Tokyo";
 
@@ -38,5 +38,3 @@ describe("live grok diagnostic (small context)", () => {
     }
   );
 });
-
-

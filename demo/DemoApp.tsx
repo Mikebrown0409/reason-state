@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Timeline } from "../src/ui/Timeline.js";
 import { AssumptionCard } from "../src/ui/AssumptionCard.js";
 import { ReasonState } from "../src/engine/ReasonState.js";
 import type { EchoState, Patch } from "../src/engine/types.js";
-import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
+import { runSimpleAgent as runSimple } from "../examples/agents/simpleAgent.js";
 import { runDagAgent } from "../examples/agents/dagAgent.js";
-import { planAndAct } from "../src/agent/planAndAct.js";
+import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
 import { resetCalendarHolds } from "../src/tools/mockBooking.js";
-import confetti from "canvas-confetti";
+import { mockBooking } from "../src/tools/mockBooking.js";
 
 type HistoryEntry = { state: EchoState; label: string; idx: number };
 
@@ -85,13 +85,15 @@ export function DemoApp() {
             },
             initialState
           )
-        : planAndAct({
-            goal: q,
-            budget: b,
-            facts: injected,
-            bookingDates: startDate && endDate ? { startDate, endDate } : undefined,
+        : runSimple(
+            q,
+            b,
+            injected,
+            {
+              bookingDates: startDate && endDate ? { startDate, endDate } : undefined
+            },
             initialState
-          });
+          );
     runner.then((res) => {
       const withIdx = res.history.map((h, i) => ({ ...h, idx: i }));
       setHistory(withIdx);
@@ -99,7 +101,7 @@ export function DemoApp() {
       setPlan(res.plan ?? "");
       setPlanMeta(res.planMeta);
       setPlanMetaHistory(res.planMetaHistory ?? []);
-      setPlanMessages(res.planMessages ?? []);
+      setPlanMessages((res as any).planMessages ?? []);
       setAgentMessage(res.agentMessage ?? "");
       setEvents(res.events);
       setTimeline((prev) => [...prev, `Turn ${res.history.length}: ${res.events.join(" | ")}`]);
@@ -154,12 +156,6 @@ export function DemoApp() {
       if (rollbackId) setLastRecomputedId(rollbackId);
     });
   };
-
-  useEffect(() => {
-    if (history.length >= 3) {
-      confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
-    }
-  }, [history.length]);
 
   const handleAssumptionClick = (id: string) => {
     const currState = current?.state;

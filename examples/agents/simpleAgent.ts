@@ -67,35 +67,40 @@ export async function runSimpleAgent(
       id: "goal",
       type: "planning",
       summary: `Plan for ${query}`,
-      details: { destination: query, budget }
-    }
+      details: { destination: query, budget },
+    },
   });
   seedPatches.push({
     op: hasGoal ? "replace" : "add",
     path: "/summary/goal",
-    value: `Goal: ${query}`
+    value: `Goal: ${query}`,
   });
   seedPatches.push({
     op: hasBudget ? "replace" : "add",
     path: "/raw/budget",
-    value: { id: "budget", type: "fact", details: { amount: budget } }
+    value: { id: "budget", type: "fact", details: { amount: budget } },
   });
   seedPatches.push({
     op: hasBudget ? "replace" : "add",
     path: "/summary/budget",
-    value: `Budget: ${budget}`
+    value: `Budget: ${budget}`,
   });
   if (!hasAgentNote) {
     seedPatches.push({
       op: "add",
       path: "/summary/agent-note",
-      value: "Agent note: pending"
+      value: "Agent note: pending",
     });
   }
-  applyStep(seedPatches, hasGoal || hasBudget ? "Update goal/budget" : `Seed goal (${budget.toLocaleString()} budget)`);
+  applyStep(
+    seedPatches,
+    hasGoal || hasBudget ? "Update goal/budget" : `Seed goal (${budget.toLocaleString()} budget)`
+  );
 
   if (injectedFacts && injectedFacts.length > 0) {
-    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) => k.startsWith("input-")).length;
+    const existingInputs = Object.keys(engine.snapshot.raw ?? {}).filter((k) =>
+      k.startsWith("input-")
+    ).length;
     const factPatches: Patch[] = injectedFacts.flatMap((f, i) => {
       const id = `input-${existingInputs + i}`;
       return [
@@ -110,10 +115,10 @@ export async function runSimpleAgent(
             assumptionStatus: "valid",
             status: "open",
             sourceType: "user",
-            sourceId: id
-          }
+            sourceId: id,
+          },
         },
-        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` }
+        { op: "add", path: `/summary/${id}`, value: `User input: ${f.summary}` },
       ];
     });
     applyStep(factPatches, "Injected facts");
@@ -128,7 +133,12 @@ export async function runSimpleAgent(
   async function runPlanTurn(label: string, goal: string) {
     try {
       const planRes = await grokPlanWithContext(engine.snapshot, goal);
-      planMetaHistory.push({ attempts: planRes.attempts, lastError: planRes.lastError, raw: planRes.raw, label });
+      planMetaHistory.push({
+        attempts: planRes.attempts,
+        lastError: planRes.lastError,
+        raw: planRes.raw,
+        label,
+      });
       if (planRes.patches.length > 0) {
         planPatches = planRes.patches;
         applyStep(planRes.patches, label);
@@ -150,7 +160,9 @@ export async function runSimpleAgent(
   );
 
   // If governance blockers remain (unknowns/dirty) or no patches, attempt a second turn focused on blockers
-  const hasBlockers = (engine.snapshot.unknowns?.length ?? 0) > 0 || Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
+  const hasBlockers =
+    (engine.snapshot.unknowns?.length ?? 0) > 0 ||
+    Object.values(engine.snapshot.raw ?? {}).some((n) => n.dirty);
   if (!planPatches || hasBlockers) {
     await runPlanTurn(
       "Plan turn 2 (resolve blockers)",
@@ -159,12 +171,16 @@ export async function runSimpleAgent(
   }
 
   // Fallback: if Grok didn't refresh agent-note, surface the latest injected facts so the UI reflects them.
-  if ((!agentNote || agentNote === "Agent note: pending") && injectedFacts && injectedFacts.length > 0) {
+  if (
+    (!agentNote || agentNote === "Agent note: pending") &&
+    injectedFacts &&
+    injectedFacts.length > 0
+  ) {
     const factsText = injectedFacts.map((f) => f.summary).join("; ");
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: `Updated with new facts: ${factsText}`
+      value: `Updated with new facts: ${factsText}`,
     };
     applyStep([notePatch], "Agent note fallback (facts)");
     agentNote = engine.snapshot.summary?.["agent-note"];
@@ -186,8 +202,8 @@ export async function runSimpleAgent(
             status: "resolved",
             summary: "Travel dates provided",
             details: { ...(node.details as any), resolvedAt: new Date().toISOString() },
-            dirty: false
-          }
+            dirty: false,
+          },
         });
       });
     if (resolveUnknowns.length > 0) {
@@ -200,7 +216,7 @@ export async function runSimpleAgent(
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: "Need start/end dates to proceed with booking."
+      value: "Need start/end dates to proceed with booking.",
     };
     applyStep([notePatch], "Booking skipped (dates missing)");
     return {
@@ -211,17 +227,21 @@ export async function runSimpleAgent(
       planMeta,
       planMetaHistory,
       planMessages,
-      agentMessage: "Need start/end dates to proceed with booking."
+      agentMessage: "Need start/end dates to proceed with booking.",
     };
   }
 
   // Identify existing booking to reuse/replace
-  const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) => id.startsWith("booking-"));
+  const existingBookingId = Object.keys(engine.snapshot.raw ?? {}).find((id) =>
+    id.startsWith("booking-")
+  );
   const reuseExisting =
     existingBookingId &&
     (engine.snapshot.raw[existingBookingId]?.details as any)?.destination === query &&
     (engine.snapshot.raw[existingBookingId]?.details as any)?.budget === budget;
-  const bookingId = reuseExisting ? existingBookingId! : `booking-${query}-${options.bookingDates?.startDate ?? "nodates"}-${options.bookingDates?.endDate ?? "nodates"}`;
+  const bookingId = reuseExisting
+    ? existingBookingId!
+    : `booking-${query}-${options.bookingDates?.startDate ?? "nodates"}-${options.bookingDates?.endDate ?? "nodates"}`;
 
   // Booking (governed)
   if (!engine.canExecute("action")) {
@@ -241,8 +261,8 @@ export async function runSimpleAgent(
               status: "resolved",
               summary: "Travel dates provided",
               details: { ...(node.details as any), resolvedAt: new Date().toISOString() },
-              dirty: false
-            }
+              dirty: false,
+            },
           });
         });
       if (resolveUnknowns.length > 0) {
@@ -259,7 +279,7 @@ export async function runSimpleAgent(
         planMeta,
         planMetaHistory,
         planMessages,
-        agentMessage: agentNote && agentNote !== "Agent note: pending" ? agentNote : ""
+        agentMessage: agentNote && agentNote !== "Agent note: pending" ? agentNote : "",
       };
     }
   }
@@ -269,13 +289,16 @@ export async function runSimpleAgent(
     budget,
     unknowns: engine.snapshot.unknowns,
     startDate: options.bookingDates?.startDate,
-    endDate: options.bookingDates?.endDate
+    endDate: options.bookingDates?.endDate,
   });
-  const bookingBlocked = bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
+  const bookingBlocked =
+    bookingPatches[0]?.value && (bookingPatches[0].value as any).status === "blocked";
   applyStep(bookingPatches, bookingBlocked ? "Booking blocked" : "Booking placed");
 
   if (planMeta) {
-    events.push(`Grok validation: attempts=${planMeta.attempts}${planMeta.lastError ? ` lastError=${planMeta.lastError}` : ""}`);
+    events.push(
+      `Grok validation: attempts=${planMeta.attempts}${planMeta.lastError ? ` lastError=${planMeta.lastError}` : ""}`
+    );
   }
 
   const bookingNode = (bookingPatches.find((p) => (p.value as any)?.type === "action")?.value ??
@@ -286,7 +309,7 @@ export async function runSimpleAgent(
         ? `Booking blocked: dates clash (${bookingNode.details.conflict.startDate}–${bookingNode.details.conflict.endDate}). Try new dates.`
         : bookingNode?.details?.missing
           ? `Booking blocked: missing ${bookingNode.details.missing.join(", ")}.`
-          : bookingNode?.summary ?? "Booking blocked."
+          : (bookingNode?.summary ?? "Booking blocked.")
       : `Booked for ${bookingNode?.details?.destination ?? query} within budget ${bookingNode?.details?.budget ?? budget}.`
     : "";
   const agentMessage = agentNote || agentMessageFromBooking;
@@ -297,13 +320,13 @@ export async function runSimpleAgent(
     const clashPatch: Patch = {
       op: "replace",
       path: `/raw/${bookingId}`,
-      value: { ...(bookingNode as any), dirty: false }
+      value: { ...(bookingNode as any), dirty: false },
     };
     applyStep([clashPatch], "Mark clash clean");
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: agentMessageFromBooking
+      value: agentMessageFromBooking,
     };
     applyStep([notePatch], "Update agent note (clash)");
   }
@@ -314,7 +337,7 @@ export async function runSimpleAgent(
     const notePatch: Patch = {
       op: engine.snapshot.summary?.["agent-note"] ? "replace" : "add",
       path: "/summary/agent-note",
-      value: agentMessageFromBooking || "Booking resolved."
+      value: agentMessageFromBooking || "Booking resolved.",
     };
     applyStep([notePatch], "Refresh agent note");
 
@@ -334,14 +357,14 @@ export async function runSimpleAgent(
           status: "resolved",
           summary: `Superseded by ${bookingId}`,
           dirty: false,
-          updatedAt: new Date().toISOString()
-        }
+          updatedAt: new Date().toISOString(),
+        },
       });
       if (engine.snapshot.summary?.[id]) {
         supersedePatches.push({
           op: "replace",
           path: `/summary/${id}`,
-          value: `Booking ${id} superseded by ${bookingId}`
+          value: `Booking ${id} superseded by ${bookingId}`,
         });
       }
     });
@@ -363,7 +386,6 @@ export async function runSimpleAgent(
     planMeta,
     planMetaHistory,
     planMessages,
-    agentMessage: resolvedAgentMessage
+    agentMessage: resolvedAgentMessage,
   };
 }
-

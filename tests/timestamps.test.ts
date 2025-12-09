@@ -19,8 +19,8 @@ describe("timestamps", () => {
         {
           op: "replace",
           path: "/raw/t1",
-          value: { id: "t1", type: "fact", summary: "updated" }
-        }
+          value: { id: "t1", type: "fact", summary: "updated" },
+        },
       ],
       added
     );
@@ -28,5 +28,3 @@ describe("timestamps", () => {
     expect(replaced.raw.t1.updatedAt).not.toBe(updated1);
   });
 });
-
-

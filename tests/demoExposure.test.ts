@@ -5,24 +5,24 @@ import type { GrokPlanResult } from "../src/tools/grokChat.js";
 let capturedCall: { goal?: string; rawIds?: string[]; summaries?: Record<string, string> } = {};
 
 vi.mock("../src/tools/grokChat.js", async (orig) => {
-  const mod = await orig();
+  const mod: any = await orig();
   return {
     ...mod,
     grokPlanWithContext: vi.fn(async (state: any, goal: string): Promise<GrokPlanResult> => {
       capturedCall = {
         goal,
         rawIds: Object.keys(state.raw ?? {}),
-        summaries: { ...(state.summary ?? {}) }
+        summaries: { ...(state.summary ?? {}) },
       };
       return {
         patches: [
           { op: "replace", path: "/summary/goal", value: "Goal: mock plan" },
-          { op: "add", path: "/summary/budget", value: "Budget: mock" }
+          { op: "add", path: "/summary/budget", value: "Budget: mock" },
         ],
         attempts: 1,
-        raw: JSON.stringify([{ op: "replace", path: "/summary/goal", value: "Goal: mock plan" }])
+        raw: JSON.stringify([{ op: "replace", path: "/summary/goal", value: "Goal: mock plan" }]),
       };
-    })
+    }),
   };
 });
 
@@ -44,5 +44,3 @@ describe("demo exposure: what we send/receive with Grok", () => {
     expect(res.planMetaHistory?.[0].raw).toBeDefined();
   });
 });
-
-

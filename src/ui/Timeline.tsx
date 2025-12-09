@@ -21,14 +21,20 @@ export function Timeline({ items, active = items.length - 1 }: TimelineProps) {
             gap: "8px",
             marginBottom: 4,
             color: idx === active ? "#0f172a" : "#475569",
-            fontWeight: idx === active ? 600 : 400
+            fontWeight: idx === active ? 600 : 400,
           }}
         >
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: idx <= active ? "#2563eb" : "#cbd5e1" }} />
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: idx <= active ? "#2563eb" : "#cbd5e1",
+            }}
+          />
           <span>{item}</span>
         </motion.div>
       ))}
     </div>
   );
 }
-

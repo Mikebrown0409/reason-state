@@ -12,7 +12,8 @@ function getBearer(): string | undefined {
     (globalThis as any)?.process?.env?.GROK_API_KEY ??
     (globalThis as any)?.process?.env?.VITE_GROK_API_KEY ??
     (typeof import.meta !== "undefined"
-      ? (import.meta as any)?.env?.VITE_X_BEARER_TOKEN ?? (import.meta as any)?.env?.VITE_GROK_API_KEY
+      ? ((import.meta as any)?.env?.VITE_X_BEARER_TOKEN ??
+        (import.meta as any)?.env?.VITE_GROK_API_KEY)
       : undefined) ??
     (typeof __VITE_X_BEARER_TOKEN__ !== "undefined" && __VITE_X_BEARER_TOKEN__.length > 0
       ? __VITE_X_BEARER_TOKEN__
@@ -21,7 +22,7 @@ function getBearer(): string | undefined {
       ? __VITE_GROK_API_KEY__
       : undefined) ??
     (typeof window !== "undefined"
-      ? (window as any)?.VITE_X_BEARER_TOKEN ?? (window as any)?.VITE_GROK_API_KEY
+      ? ((window as any)?.VITE_X_BEARER_TOKEN ?? (window as any)?.VITE_GROK_API_KEY)
       : undefined);
   if (typeof token === "string" && token.trim().length === 0) return undefined;
   return token;
@@ -33,7 +34,10 @@ export async function xSearch(query: string): Promise<Patch[]> {
     throw new Error("X search requires X_BEARER_TOKEN / VITE_X_BEARER_TOKEN (no fallback allowed)");
   }
   const base = typeof window !== "undefined" ? "/x-api" : "https://api.twitter.com";
-  const url = new URL(`${base}/2/tweets/search/recent`, typeof window !== "undefined" ? window.location.origin : undefined);
+  const url = new URL(
+    `${base}/2/tweets/search/recent`,
+    typeof window !== "undefined" ? window.location.origin : undefined
+  );
   const startTime = new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString();
   url.searchParams.set("query", `${query} lang:en`);
   url.searchParams.set("start_time", startTime);
@@ -41,8 +45,8 @@ export async function xSearch(query: string): Promise<Patch[]> {
   try {
     const res = await fetch(url.toString(), {
       headers: {
-        Authorization: `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      },
     });
     if (!res.ok) {
       console.error("xSearch fetch error", res.status, await res.text());
@@ -59,12 +63,11 @@ export async function xSearch(query: string): Promise<Patch[]> {
         details: { author: hit.author, created_at: hit.created_at, query },
         assumptionStatus: "valid",
         sourceId: hit.id,
-        sourceType: "x-post"
-      }
+        sourceType: "x-post",
+      },
     }));
   } catch (err) {
     console.error("xSearch fetch failed", err);
     return [];
   }
 }
-

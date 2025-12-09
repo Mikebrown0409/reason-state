@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
 import type { Checkpoint, EchoState, Patch } from "./types.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import Database from "better-sqlite3";
 
 const DEFAULT_DB = ":memory:";
 const isBrowser = typeof window !== "undefined";
@@ -25,19 +28,19 @@ export async function saveCheckpoint(
   }
 
   const db = await open(dbPath);
-  db.prepare(
-    "INSERT INTO checkpoints (id, payload, createdAt, turnId) VALUES (?, ?, ?, ?)"
-  ).run(id, JSON.stringify(state), createdAt, turnId ?? null);
+  db.prepare("INSERT INTO checkpoints (id, payload, createdAt, turnId) VALUES (?, ?, ?, ?)").run(
+    id,
+    JSON.stringify(state),
+    createdAt,
+    turnId ?? null
+  );
   const checkpoint: Checkpoint = { id, state, createdAt, turnId };
   if (!state.checkpoints) state.checkpoints = {};
   state.checkpoints[id] = checkpoint;
   return checkpoint;
 }
 
-export async function loadCheckpoint(
-  id: string,
-  dbPath = DEFAULT_DB
-): Promise<Checkpoint> {
+export async function loadCheckpoint(id: string, dbPath = DEFAULT_DB): Promise<Checkpoint> {
   if (isBrowser || dbPath === DEFAULT_DB) {
     const cp = memStore.get(id);
     if (!cp) throw new Error(`Checkpoint not found: ${id}`);
@@ -45,9 +48,7 @@ export async function loadCheckpoint(
   }
 
   const db = await open(dbPath);
-  const row = db
-    .prepare("SELECT payload, createdAt, turnId FROM checkpoints WHERE id = ?")
-    .get(id);
+  const row = db.prepare("SELECT payload, createdAt, turnId FROM checkpoints WHERE id = ?").get(id);
   if (!row) throw new Error(`Checkpoint not found: ${id}`);
   const state: EchoState = JSON.parse(row.payload);
   return { id, state, createdAt: row.createdAt, turnId: row.turnId ?? undefined };
@@ -95,7 +96,7 @@ async function open(dbPath: string) {
     assumptions: [],
     unknowns: [],
     history: [],
-    checkpoints: {}
+    checkpoints: {},
   };
   saveCheckpoint(state).then((cp) => {
     console.assert(cp.id, "checkpoint must have id");
@@ -104,4 +105,3 @@ async function open(dbPath: string) {
     });
   });
 })();
-

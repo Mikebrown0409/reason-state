@@ -10,7 +10,7 @@ describe("validateModelPatches", () => {
       validateModelPatches(
         JSON.stringify([
           { op: "delete", path: "/summary/goal", value: "x" },
-          { op: "add", path: "/raw/new", value: { id: "new" } }
+          { op: "add", path: "/raw/new", value: { id: "new" } },
         ]),
         known
       )
@@ -22,7 +22,7 @@ describe("validateModelPatches", () => {
     const patches = validateModelPatches(
       JSON.stringify([
         { op: "replace", path: "/summary/goal", value: "updated goal" },
-        { op: "add", path: "/summary/new", value: "new summary" }
+        { op: "add", path: "/summary/new", value: "new summary" },
       ]),
       known
     );
@@ -38,8 +38,8 @@ describe("applyPatches uuid assignment", () => {
         {
           op: "add",
           path: "/raw/temp-id",
-          value: { type: "fact", summary: "temp" }
-        }
+          value: { type: "fact", summary: "temp" },
+        },
       ],
       state
     );
@@ -57,8 +57,8 @@ describe("applyPatches uuid assignment", () => {
           {
             op: "replace",
             path: "/raw/missing",
-            value: { id: "missing" }
-          }
+            value: { id: "missing" },
+          },
         ],
         state
       )
@@ -73,8 +73,8 @@ describe("applyPatches uuid assignment", () => {
           {
             op: "add",
             path: "/raw/bad",
-            value: { type: "fact", summary: "bad", extra: "nope" }
-          }
+            value: { type: "fact", summary: "bad", extra: "nope" },
+          },
         ],
         state
       )
@@ -85,7 +85,9 @@ describe("applyPatches uuid assignment", () => {
     const known = new Set<string>(["goal"]);
     expect(() =>
       validateModelPatches(
-        JSON.stringify([{ op: "add", path: "/raw/goal", value: { id: "goal", details: { foo: "bar" } } }]),
+        JSON.stringify([
+          { op: "add", path: "/raw/goal", value: { id: "goal", details: { foo: "bar" } } },
+        ]),
         known
       )
     ).toThrow(/summaries only|may not write to \/raw/i);
@@ -99,8 +101,8 @@ describe("applyPatches uuid assignment", () => {
           {
             op: "add",
             path: "/summary/s1",
-            value: { not: "string" }
-          }
+            value: { not: "string" },
+          },
         ],
         state
       )
@@ -125,12 +127,11 @@ describe("applyPatches uuid assignment", () => {
           {
             op: "replace",
             path: "/summary/missing",
-            value: "should fail"
-          }
+            value: "should fail",
+          },
         ],
         state
       )
     ).toThrow(/does not exist/i);
   });
 });
-

@@ -1,18 +1,8 @@
-export type NodeType =
-  | "fact"
-  | "unknown"
-  | "assumption"
-  | "action"
-  | "planning";
+export type NodeType = "fact" | "unknown" | "assumption" | "action" | "planning";
 
 export type NodeStatus = "open" | "blocked" | "resolved" | "dirty";
 
-export type AssumptionStatus =
-  | "valid"
-  | "retracted"
-  | "superseded"
-  | "unknown"
-  | "resolved";
+export type AssumptionStatus = "valid" | "retracted" | "superseded" | "unknown" | "resolved";
 
 export interface Patch {
   op: "add" | "replace";
@@ -84,7 +74,7 @@ export function createEmptyState(): EchoState {
     assumptions: [],
     unknowns: [],
     history: [],
-    checkpoints: {}
+    checkpoints: {},
   };
 }
 
@@ -97,38 +87,25 @@ export function createEmptyState(): EchoState {
     id: "u1",
     type: "unknown",
     status: "blocked",
-    dirty: true
+    dirty: true,
   };
   state.raw[unknownNode.id] = unknownNode;
   state.unknowns.push(unknownNode.id);
-  console.assert(
-    state.unknowns.includes("u1"),
-    "unknown node must register in unknowns list"
-  );
+  console.assert(state.unknowns.includes("u1"), "unknown node must register in unknowns list");
 
   // Assumption lifecycle: valid -> superseded -> retracted.
   const assumption: AssumptionMeta = {
     id: "a1",
     status: "valid",
-    createdAt: "2025-01-01T00:00:00Z"
+    createdAt: "2025-01-01T00:00:00Z",
   };
-  console.assert(
-    assumption.status === "valid",
-    "assumption starts valid"
-  );
+  console.assert(assumption.status === "valid", "assumption starts valid");
   assumption.status = "superseded";
-  console.assert(
-    assumption.status === "superseded",
-    "assumption can be superseded"
-  );
+  console.assert(assumption.status === "superseded", "assumption can be superseded");
   assumption.status = "retracted";
-  console.assert(
-    assumption.status === "retracted",
-    "assumption can be retracted"
-  );
+  console.assert(assumption.status === "retracted", "assumption can be retracted");
 
   // Patch typing: add/replace carry value.
   const addPatch: Patch = { op: "add", path: "/raw/u1", value: unknownNode };
   console.assert(addPatch.value !== undefined, "add/replace carry value");
 })();
-

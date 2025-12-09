@@ -15,11 +15,13 @@ export function addNode(
   initialState?: EchoState
 ): EchoState {
   const engine = new ReasonState(options, initialState ? clone(initialState) : undefined);
-  const patches: Patch[] = [
-    { op: "add", path: `/raw/${node.id}`, value: node }
-  ];
+  const patches: Patch[] = [{ op: "add", path: `/raw/${node.id}`, value: node }];
   if (node.summary) {
-    patches.push({ op: engine.snapshot.summary?.[node.id] ? "replace" : "add", path: `/summary/${node.id}`, value: node.summary });
+    patches.push({
+      op: engine.snapshot.summary?.[node.id] ? "replace" : "add",
+      path: `/summary/${node.id}`,
+      value: node.summary,
+    });
   }
   engine.applyPatches(patches);
   return clone(engine.snapshot);
@@ -34,12 +36,14 @@ export function updateNode(
   const engine = new ReasonState(options, initialState ? clone(initialState) : undefined);
   const current = engine.snapshot.raw[nodeId];
   const next = { ...(current ?? {}), ...value, id: nodeId };
-  const patches: Patch[] = [{ op: current ? "replace" : "add", path: `/raw/${nodeId}`, value: next }];
+  const patches: Patch[] = [
+    { op: current ? "replace" : "add", path: `/raw/${nodeId}`, value: next },
+  ];
   if (value.summary) {
     patches.push({
       op: engine.snapshot.summary?.[nodeId] ? "replace" : "add",
       path: `/summary/${nodeId}`,
-      value: value.summary as string
+      value: value.summary as string,
     });
   }
   engine.applyPatches(patches);
@@ -64,4 +68,3 @@ export function rollbackSubtree(
   }
   return clone(engine.snapshot);
 }
-

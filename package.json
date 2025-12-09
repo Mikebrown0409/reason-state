@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/api/facade.ts",
     "./agent/planAndAct": "./src/agent/planAndAct.ts",
+    "./agent/plan": "./src/agent/planAndAct.ts",
     "./api": "./src/api/facade.ts",
     "./context": "./src/context/contextBuilder.ts",
     "./engine": "./src/engine/ReasonState.ts",
@@ -32,13 +33,14 @@
     "test": "tsx tests/determinism.test.ts",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
-    "lint": "tsc --noEmit"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
+    "lint:types": "tsc --noEmit",
+    "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\""
   },
   "dependencies": {
     "@langchain/core": "^1.1.4",
     "@langchain/langgraph": "^0.2.0",
     "better-sqlite3": "^9.0.0",
-    "canvas-confetti": "^1.9.0",
     "framer-motion": "^10.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
@@ -48,6 +50,13 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0",

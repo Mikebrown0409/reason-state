@@ -1,14 +1,12 @@
 # Context Builder & Patch DSL
 
 ## Context builder
-- Deterministic ordering (stable across runs) with token budget.
+- Deterministic ordering (stable across runs) with hard `maxChars` budget.
 - Inputs: summaries only (no raw details).
-- Priority buckets:
-  1) Goals/constraints
-  2) Blockers: unknowns, dirty nodes, invalid assumptions
-  3) Active plans
-  4) Top-K facts/assumptions by relevance/recency
-  5) Minimal timeline (compact)
+- Modes:
+  - Deterministic: fixed bucket ordering + truncation.
+  - Balanced/Aggressive: adaptive fill by characters; always keeps blockers (unknown/dirty/invalid assumptions), goal/dep chain, recent changes, then fills per-bucket caps that scale with remaining budget and emits overflow one-liners instead of dropping silently.
+- Timeline: appended only if space remains; tail trimmed by `timelineTail`.
 - Include lineage when present: `sourceType/sourceId`.
 - Model target: Grok 4.1 (`grok-4-1-fast-reasoning-latest`).
 

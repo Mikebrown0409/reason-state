@@ -20,6 +20,6 @@
     },
     "types": ["vitest", "node"]
   },
-  "include": ["src", "demo", "tests"]
+  "include": ["src", "demo", "tests", "types"]
 }
 
