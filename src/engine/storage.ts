@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { randomUUID } from "crypto";
 import type { Checkpoint, EchoState, Patch } from "./types.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -11,12 +10,18 @@ const isBrowser = typeof window !== "undefined";
 const memStore = new Map<string, Checkpoint>();
 const memLog: Patch[] = [];
 
+function makeId(): string {
+  const g = (globalThis as any)?.crypto;
+  if (g && typeof g.randomUUID === "function") return g.randomUUID();
+  return `rs-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export async function saveCheckpoint(
   state: EchoState,
   dbPath = DEFAULT_DB,
   turnId?: string
 ): Promise<Checkpoint> {
-  const id = randomUUID();
+  const id = makeId();
   const createdAt = new Date().toISOString();
 
   // Use in-memory store for browser and for default ":memory:" to avoid per-connection SQLite isolation.
