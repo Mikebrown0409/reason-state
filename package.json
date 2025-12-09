@@ -1,6 +1,6 @@
 {
   "name": "reason-state",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "private": false,
   "main": "./src/api/facade.ts",
@@ -33,6 +33,28 @@
     "src/tools/anthropicPlanner.ts",
     "src/tools/openaiCompatiblePlanner.ts",
     "README.md"
+  ],
+  "keywords": [
+    "ai-agents",
+    "agent-memory",
+    "long-context",
+    "state-management",
+    "llm-memory",
+    "token-optimization",
+    "agentic-workflow",
+    "grok",
+    "openai",
+    "anthropic",
+    "langgraph",
+    "langchain",
+    "deterministic-reasoning",
+    "self-healing",
+    "assumptions",
+    "memory-compression",
+    "long-term-memory",
+    "multi-agent",
+    "agi",
+    "reasoning-engine"
   ],
   "scripts": {
     "dev": "vite",
