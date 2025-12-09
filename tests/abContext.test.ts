@@ -18,7 +18,8 @@ const tasks: Task[] = [
   {
     goal: "Refactor payment module",
     facts: ["Use TypeScript", "Add tests"],
-    assert: (resp) => resp.toLowerCase().includes("refactor") && resp.toLowerCase().includes("payment"),
+    assert: (resp) =>
+      resp.toLowerCase().includes("refactor") && resp.toLowerCase().includes("payment"),
   },
   {
     goal: "Add logging to auth service",
@@ -28,7 +29,10 @@ const tasks: Task[] = [
 ];
 
 describe.skipIf(!hasKey)("A/B: buildContext vs raw dump (live Grok)", () => {
-  async function runVariant(task: Task, useContext: boolean): Promise<{ text: string; length: number }> {
+  async function runVariant(
+    task: Task,
+    useContext: boolean
+  ): Promise<{ text: string; length: number }> {
     const state: EchoState = {
       raw: {
         goal: { id: "goal", type: "planning", summary: task.goal, status: "open" },
@@ -50,19 +54,17 @@ describe.skipIf(!hasKey)("A/B: buildContext vs raw dump (live Grok)", () => {
     return { text, length: text.length };
   }
 
-  it(
-    "logs token/length/quality diffs for raw vs buildContext",
-    { timeout: 20000 },
-    async () => {
+  it("logs token/length/quality diffs for raw vs buildContext", { timeout: 20000 }, async () => {
     for (const task of tasks) {
-      const [rawResp, ctxResp] = await Promise.all([runVariant(task, false), runVariant(task, true)]);
+      const [rawResp, ctxResp] = await Promise.all([
+        runVariant(task, false),
+        runVariant(task, true),
+      ]);
       const passedRaw = task.assert(rawResp.text);
       const passedCtx = task.assert(ctxResp.text);
       console.log(
         `[A/B] goal="${task.goal}" rawLen=${rawResp.length} ctxLen=${ctxResp.length} passRaw=${passedRaw} passCtx=${passedCtx}`
       );
     }
-    }
-  );
+  });
 });
-

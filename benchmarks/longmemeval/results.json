@@ -1,0 +1,43 @@
+{
+  "results": [
+    {
+      "backend": "reason-state",
+      "sampleId": "conv-26",
+      "coverage": 0.020100502512562814,
+      "avgTokens": 741
+    },
+    {
+      "backend": "raw",
+      "sampleId": "conv-26",
+      "coverage": 0.010050251256281407,
+      "avgTokens": 2919
+    }
+  ],
+  "summary": [
+    {
+      "backend": "reason-state",
+      "accuracy": 0.020100502512562814,
+      "avgTokens": 741
+    },
+    {
+      "backend": "raw",
+      "accuracy": 0.010050251256281407,
+      "avgTokens": 2919
+    }
+  ],
+  "llmResults": [
+    {
+      "backend": "reason-state",
+      "sampleId": "conv-26",
+      "f1": 0.09523809523809525,
+      "tokens": 907
+    },
+    {
+      "backend": "raw",
+      "sampleId": "conv-26",
+      "f1": 0.017543859649122806,
+      "tokens": 7221.333333333333
+    }
+  ],
+  "maxTokens": 800
+}

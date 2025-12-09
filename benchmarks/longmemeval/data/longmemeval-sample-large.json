@@ -1,0 +1,13 @@
+[
+  {
+    "id": "lmv-large-1",
+    "content": "Alice met Bob in Paris. They discussed migrating the database. Later, Alice said to notify SRE before changes.\nProject scope expanded to include billing. Alice requested a rollback plan. Bob noted risks in auth. They aligned on staging first.\nOver several days, they added tests, updated deployment scripts, and coordinated with SRE.\nDay 5: Alice confirmed budget approval. Day 6: Bob documented rollout steps. Day 7: They rehearsed rollback.\nDay 8: SRE requested an outage window. Day 9: New risk emerged: DB migrations might lock tables.\nDay 10: Alice said to notify SRE before changes again to ensure coverage.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\nThis log repeats instructions and operational details across many lines to simulate a long context.\n",
+    "qas": [
+      { "question": "Who met Bob?", "answer": "Alice" },
+      { "question": "Where did they meet?", "answer": "Paris" },
+      { "question": "Who should be notified before changes?", "answer": "SRE" },
+      { "question": "What plan did Alice request?", "answer": "rollback plan" }
+    ]
+  }
+]
+
