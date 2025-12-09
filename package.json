@@ -42,10 +42,13 @@
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
     "lint:types": "tsc --noEmit",
-    "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\""
+    "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\"",
+    "bench:longmemeval": "tsx benchmarks/longmemeval/runner.ts"
   },
   "dependencies": {
+    "@dqbd/tiktoken": "^1.0.22",
     "better-sqlite3": "^9.0.0",
+    "node-fetch": "^2.7.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
