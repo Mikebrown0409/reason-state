@@ -44,7 +44,7 @@ import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/ap
 - JSON-first governed graph: raw vs summary, lineage, timestamps, edges (`depends_on`, `contradicts`, `temporalBefore/After`), no deletes.
 - Patch DSL (add/replace only), Zod-validated, engine-assigned UUIDs.
 - Governance signals: dirty/unknown/assumption status; dependency/temporal/contradiction handling; optional gating via `canExecute`; rollback helper.
-- Context builder: summaries-only, deterministic ordering, prioritizes dirty/new/assumptions, token budgeted.
+- Context builder: summaries-only, deterministic ordering, prioritizes dirty/new/assumptions, token budgeted; balanced/aggressive modes adapt to a hard `maxChars`, keep blockers/goal chain/recent changes first, and summarize overflow instead of dropping it.
 - Replay/time-travel: NDJSON append-only log + checkpoints; `replayFromLog` deterministic rebuild.
 - Tools: Grok 4.1 planner (strict prompt/validation/backoff), X search (fails loud w/o token).
 - Optional helper: `plan` with built-in prompt and agent-note fallback (plan-only). Examples (mock booking, coding agent) live in `examples/` and are not shipped.
