@@ -110,31 +110,29 @@ function coverage(text: string, terms: string[]): number {
 }
 
 describe.skipIf(!hasKey)("Live memory scenario: raw dump vs buildContext (Grok)", () => {
-  it(
-    "compares raw vs context on a large state",
-    { timeout: 30000 },
-    async () => {
-      const state = makeState(scenario);
-      const rawDump = makeNaiveDump(scenario);
-      const ctx = buildContext(state, { includeTimeline: false, maxChars: 4000 });
+  it("compares raw vs context on a large state", { timeout: 30000 }, async () => {
+    const state = makeState(scenario);
+    const rawDump = makeNaiveDump(scenario);
+    const ctx = buildContext(state, { includeTimeline: false, maxChars: 4000 });
 
-      const prompt = (content: string) =>
-        `You are assisting with a large refactor. Context:\n${content}\nRespond with 3-5 next steps under 120 words. Mention payments, auth, logging, and rollout where relevant.`;
+    const prompt = (content: string) =>
+      `You are assisting with a large refactor. Context:\n${content}\nRespond with 3-5 next steps under 120 words. Mention payments, auth, logging, and rollout where relevant.`;
 
-      const [rawResp, ctxResp] = await Promise.all([grokChat(prompt(rawDump)), grokChat(prompt(ctx))]);
+    const [rawResp, ctxResp] = await Promise.all([
+      grokChat(prompt(rawDump)),
+      grokChat(prompt(ctx)),
+    ]);
 
-      const rawCov = coverage(rawResp, scenario.requiredTerms);
-      const ctxCov = coverage(ctxResp, scenario.requiredTerms);
+    const rawCov = coverage(rawResp, scenario.requiredTerms);
+    const ctxCov = coverage(ctxResp, scenario.requiredTerms);
 
-      console.log(
-        `[LiveMemory] rawLen=${rawDump.length} ctxLen=${ctx.length} rawRespLen=${rawResp.length} ctxRespLen=${ctxResp.length} rawCov=${rawCov}/${scenario.requiredTerms.length} ctxCov=${ctxCov}/${scenario.requiredTerms.length}`
-      );
-      console.log(`[LiveMemory RAW RESP]\n${rawResp}\n---\n[LiveMemory CTX RESP]\n${ctxResp}\n---`);
+    console.log(
+      `[LiveMemory] rawLen=${rawDump.length} ctxLen=${ctx.length} rawRespLen=${rawResp.length} ctxRespLen=${ctxResp.length} rawCov=${rawCov}/${scenario.requiredTerms.length} ctxCov=${ctxCov}/${scenario.requiredTerms.length}`
+    );
+    console.log(`[LiveMemory RAW RESP]\n${rawResp}\n---\n[LiveMemory CTX RESP]\n${ctxResp}\n---`);
 
-      // Sanity: both responses should at least mention the goal domain.
-      expect(rawResp.length).toBeGreaterThan(0);
-      expect(ctxResp.length).toBeGreaterThan(0);
-    }
-  );
+    // Sanity: both responses should at least mention the goal domain.
+    expect(rawResp.length).toBeGreaterThan(0);
+    expect(ctxResp.length).toBeGreaterThan(0);
+  });
 });
-

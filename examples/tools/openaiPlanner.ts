@@ -20,4 +20,3 @@ export async function openaiPlanner(state: EchoState, prompt: string): Promise<P
 
   return { patches: fakePatches, attempts: 1, raw: "openai planner stub" };
 }
-

@@ -19,4 +19,3 @@ export async function anthropicPlanner(state: EchoState, prompt: string): Promis
 
   return { patches: fakePatches, attempts: 1, raw: "anthropic planner stub" };
 }
-

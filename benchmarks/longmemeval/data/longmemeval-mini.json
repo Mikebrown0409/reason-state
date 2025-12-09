@@ -1,0 +1,28 @@
+[
+  {
+    "id": "sample-1",
+    "content": "Alice met Bob in Paris. They discussed migrating the database. Later, Alice said to notify SRE before changes.",
+    "qas": [
+      { "question": "Who met Bob?", "answer": "Alice" },
+      { "question": "Where did they meet?", "answer": "Paris" },
+      { "question": "Who should be notified before changes?", "answer": "SRE" }
+    ]
+  },
+  {
+    "id": "sample-2",
+    "content": "Carla purchased tickets to Madrid next week. She also booked a hotel near the Prado. Reminder: budget is 2k.",
+    "qas": [
+      { "question": "Where is Carla traveling?", "answer": "Madrid" },
+      { "question": "What is the budget?", "answer": "2k" }
+    ]
+  },
+  {
+    "id": "sample-3",
+    "content": "Team will split services. Payments service moves to Go; auth stays in Node. Tests must be updated.",
+    "qas": [
+      { "question": "Which service moves to Go?", "answer": "Payments" },
+      { "question": "Which service stays in Node?", "answer": "auth" }
+    ]
+  }
+]
+
