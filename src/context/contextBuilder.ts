@@ -117,15 +117,14 @@ function selectDeterministic(state: EchoState, buckets: BucketSelector[]): State
     if (bucket.predicate) {
       selected = selected.filter(bucket.predicate);
     }
-    return selected
-      .sort((a, b) => {
-        const pa = priority(a);
-        const pb = priority(b);
-        if (pa !== pb) return pa - pb;
-        const ua = updatedAt(b) - updatedAt(a);
-        if (ua !== 0) return ua;
-        return a.id.localeCompare(b.id);
-      });
+    return selected.sort((a, b) => {
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      const ua = updatedAt(b) - updatedAt(a);
+      if (ua !== 0) return ua;
+      return a.id.localeCompare(b.id);
+    });
   };
 
   const lines: StateNode[] = [];
@@ -152,7 +151,12 @@ function sortByRecencyThenId(nodes: StateNode[]): StateNode[] {
   });
 }
 
-function calcCap(total: number, remainingChars: number, headerLen: number, avgLineLen = 80): number {
+function calcCap(
+  total: number,
+  remainingChars: number,
+  headerLen: number,
+  avgLineLen = 80
+): number {
   if (remainingChars <= headerLen) return 0;
   const usable = remainingChars - headerLen;
   const estLines = Math.max(1, Math.floor(usable / avgLineLen));
@@ -184,25 +188,40 @@ function formatBalancedSections(
     unique.forEach((n) => seen.add(n.id));
 
     const remainingChars = maxChars - used;
-    const cap = Math.min(
+    let cap = Math.min(
       section.maxCap ?? unique.length,
       Math.max(section.minCap ?? 0, calcCap(unique.length, remainingChars, 0))
     );
 
+    if (unique.length > cap) {
+      const overflowLine = `- ... (${unique.length - cap} more ${section.title.toLowerCase()})`;
+      while (cap > 0 && used + overflowLine.length + 1 > maxChars) {
+        cap--;
+      }
+    }
+
     let added = 0;
-    for (const n of unique.slice(0, cap)) {
-      const line = formatNode(n);
-      const len = line.length + 1;
-      if (used + len > maxChars) break;
-      lines.push(line);
-      used += len;
-      added++;
+    if (cap > 0) {
+      for (const n of unique.slice(0, cap)) {
+        const line = formatNode(n);
+        const len = line.length + 1;
+        if (used + len > maxChars) break;
+        lines.push(line);
+        used += len;
+        added++;
+      }
     }
 
     const remaining = unique.length - added;
-    if (remaining > 0) {
-      const overflow = `- ... (${remaining} more ${section.title.toLowerCase()})`;
-      maybeAdd(overflow);
+    if (remaining > 0 || (added === 0 && unique.length > 0)) {
+      const overflow = `- ... (${remaining > 0 ? remaining : unique.length} more ${section.title.toLowerCase()})`;
+      if (!maybeAdd(overflow) && added > 0) {
+        const last = lines.pop();
+        if (last) {
+          used -= last.length + 1;
+          maybeAdd(overflow);
+        }
+      }
     }
 
     if (used >= maxChars) break;
@@ -376,4 +395,3 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
   );
   return appendTimeline(body, state, includeTimeline, timelineTail, maxChars, used);
 }
-

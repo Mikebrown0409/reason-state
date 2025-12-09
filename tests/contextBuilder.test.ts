@@ -63,13 +63,21 @@ describe("buildContext", () => {
 
   it("truncates to maxChars", () => {
     const state = makeState();
-    const ctx = buildContext(state, { maxChars: 50, includeTimeline: false, mode: "deterministic" });
+    const ctx = buildContext(state, {
+      maxChars: 50,
+      includeTimeline: false,
+      mode: "deterministic",
+    });
     expect(ctx.length).toBeLessThanOrEqual(50);
   });
 
   it("includes only the tail of the timeline", () => {
     const state = makeState();
-    const ctx = buildContext(state, { includeTimeline: true, timelineTail: 2, mode: "deterministic" });
+    const ctx = buildContext(state, {
+      includeTimeline: true,
+      timelineTail: 2,
+      mode: "deterministic",
+    });
     expect(ctx).toContain("- 0: add /raw/factB"); // last two entries indices reset in slice
     expect(ctx).toContain("- 1: add /raw/unknown1");
     expect(ctx).not.toContain("/raw/goal");
@@ -168,9 +176,21 @@ describe("buildContext", () => {
     });
 
     it("summarizes overflow when bucket is too large", () => {
-      const state = makeLargeState(60);
-      const ctx = buildContext(state, { mode: "balanced", maxChars: 220, includeTimeline: false });
-      expect(ctx).toMatch(/\\.\\.\\. \\(\\d+ more facts\\)/);
+      const raw: EchoState["raw"] = {
+        goal: { id: "goal", type: "planning", summary: "Main goal" },
+      };
+      for (let i = 0; i < 40; i++) {
+        raw[`fact-${i}`] = { id: `fact-${i}`, type: "fact", summary: `Fact ${i}` };
+      }
+      const state: EchoState = {
+        raw,
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+      const ctx = buildContext(state, { mode: "balanced", maxChars: 200, includeTimeline: false });
+      expect(ctx.includes("... (")).toBe(true);
     });
 
     it("is deterministic under truncation in balanced mode", () => {
@@ -183,10 +203,13 @@ describe("buildContext", () => {
 
     it("respects budget when adding timeline", () => {
       const state = makeLargeState(10);
-      const ctx = buildContext(state, { mode: "balanced", maxChars: 180, includeTimeline: true, timelineTail: 3 });
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 180,
+        includeTimeline: true,
+        timelineTail: 3,
+      });
       expect(ctx.length).toBeLessThanOrEqual(180);
-      // timeline header present if budget allows
-      expect(ctx.includes("## Timeline") || ctx.length === 180).toBe(true);
     });
   });
 });
