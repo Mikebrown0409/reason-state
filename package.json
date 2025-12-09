@@ -1,8 +1,13 @@
 {
   "name": "reason-state",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "type": "module",
   "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mikebrown0409/reason-state"
+  },
   "main": "./src/api/facade.ts",
   "module": "./src/api/facade.ts",
   "types": "./src/api/facade.ts",
