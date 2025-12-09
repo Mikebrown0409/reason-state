@@ -105,6 +105,14 @@ Persistence: default in-memory/SQLite; or pass `storage: createRemoteStorageDriv
 - `contextBuilder.buildContext` — deterministic summaries-only context.
 - Planners: `grokChat.grokPlanWithContext`, `openaiPlanner.openaiPlanWithContext`, `anthropicPlanner.anthropicPlanWithContext` — strict validation/backoff; plug your own provider via the same planner interface.
 
+## Benchmarks (early result, Grok, TPM-limited)
+- Dataset: LongMemEval/LoCoMo (`locomo10.json`), first convo, `maxTokens=800`, `qaLimit=3`, model `grok-4-1-fast-non-reasoning`.
+- LLM F1/tokens:
+  - reason-state: F1≈0.095, tokens≈907
+  - raw dump: F1≈0.0175, tokens≈7221
+- Token reduction: ~8×; F1 lift: ~5.4×.
+- Footnote: small slice due to a 12k TPM key; full run planned when higher quota is available. Runner and flags: see `benchmarks/longmemeval/README.md`.
+
 ## Docs
 - System prompt: `docs/system-prompt.md` (add/replace only; no /raw writes from model; statuses open/blocked/resolved/dirty).
 - Context builder: `docs/context-builder.md`.
