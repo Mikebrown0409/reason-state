@@ -49,5 +49,24 @@ describe("ReasonStateSimple", () => {
     const fetchMock = (globalThis as any).fetch as ReturnType<typeof vi.fn>;
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("returns pruned context in retrieve mode without calling the planner", async () => {
+    const rs = new ReasonStateSimple({
+      apiKey: "test-key",
+      model: "test-model",
+      baseUrl: "http://fake",
+      fetcher: (globalThis as any).fetch,
+      maxTokens: 100,
+    });
+
+    await rs.add("User prefers dark mode");
+    const res = await rs.query("What theme?", { mode: "retrieve" });
+
+    expect(res.context).toBeTruthy();
+    expect(res.patches.length).toBe(0);
+
+    const fetchMock = (globalThis as any).fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
 });
 
