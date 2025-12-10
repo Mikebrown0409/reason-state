@@ -100,12 +100,16 @@ const res = await rs.query("Where to host the offsite?");
 
 ## Repo layout
 - `src/` library code (engine, context, tools, facade).
-- `src/` library code (engine, context, tools, facade).
 - `apps/server/` HTTP facade; build output in `dist/server`.
 - `apps/server/docker/` Docker assets for the HTTP service.
-- `examples/` agents/tools; `apps/demo/` for CLI/UI demo.
+- `examples/` agents/tools; `apps/demo/` for CLI/UI demo; `apps/studio/` for the debugger UI (experimental).
 - `tests/`: unit/integration; `tests/live/` are key-gated Grok/OpenAI runs (skipped when no keys).
 - `benchmarks/` longmemeval; `docs/` reference material.
+
+## Studio (experimental)
+- Dev: `npm run dev:studio` (bundled keyless sample trace).
+- Build: `npm run build:studio` (outputs to `dist/studio`).
+- Features: timeline carousel, replay log, context view, state diff, mode/vector toggles (actions stubbed for now).
 
 ## Benchmarks (early, Grok, TPM-limited)
 LongMemEval/LoCoMo, first convo, `maxTokens=800`, `qaLimit=3`, model `grok-4-1-fast-non-reasoning`:
