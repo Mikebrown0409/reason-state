@@ -1,6 +1,6 @@
 {
   "name": "reason-state",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "type": "module",
   "private": false,
   "license": "MIT",
@@ -67,6 +67,7 @@
     "test": "tsx tests/determinism.test.ts",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
+    "demo": "tsx demo.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
     "lint:types": "tsc --noEmit",
     "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\"",
@@ -76,6 +77,7 @@
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.22",
     "better-sqlite3": "^9.0.0",
+    "dotenv": "^17.2.3",
     "node-fetch": "^2.7.0",
     "zod": "^3.23.8"
   },

@@ -1,9 +1,6 @@
 import fs from "fs";
 import path from "path";
 import type { Checkpoint, EchoState, Patch } from "./types.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import Database from "better-sqlite3";
 
 const DEFAULT_DB = ":memory:";
 const isBrowser = typeof window !== "undefined";
