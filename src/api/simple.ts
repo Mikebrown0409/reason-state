@@ -8,6 +8,7 @@ type SimpleOptions = {
   apiKey?: string;
   baseUrl?: string;
   maxTokens?: number; // Approximate char budget: maxTokens * 4
+  fetcher?: typeof fetch;
 };
 
 type AddOptions = {
@@ -84,6 +85,7 @@ export class ReasonStateSimple {
         model: this.opts.model ?? "gpt-4o-mini",
         apiKey: this.opts.apiKey,
         baseUrl: this.opts.baseUrl,
+        fetcher: this.opts.fetcher,
       }
     );
     if (res.patches?.length) {
