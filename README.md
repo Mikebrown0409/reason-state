@@ -8,11 +8,11 @@ Install:
 npm install reason-state
 ```
 
-### 3-function quickstart (simple)
+### 3-function quickstart (default)
 ```ts
-import { ReasonStateSimple } from "reason-state";
+import ReasonState from "reason-state";
 
-const rs = new ReasonStateSimple({
+const rs = new ReasonState({
   apiKey: process.env.OPENAI_API_KEY,          // works with OpenAI/Groq-compatible endpoints
   model: "gpt-4o-mini",                        // or your provider model
   maxTokens: 2500,                             // ~10k chars budget
@@ -29,7 +29,7 @@ await rs.update("node-id-123", { retracted: true, reason: "New policy" });
 ```
 
 ### Optional: core/advanced APIs
-- `ReasonState` — full engine and `applyPatches`.
+- `ReasonStateAdvanced` — full engine and `applyPatches` (named export).
 - `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree` (advanced).
 - Planners: `grokChat.grokPlanWithContext`, `openaiPlanner`, `anthropicPlanner`, `openaiCompatiblePlanner`.
 
