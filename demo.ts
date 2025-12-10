@@ -33,10 +33,14 @@ async function main() {
     maxTokens: 800,
   });
 
-  await rs.add("User hates meetings on Friday");
-  await rs.add("Team retro is weekly on Mondays at 10am PT");
-  await rs.add("Budget review is Thursday 3pm PT");
-  await rs.add("Alice PTO next Tuesday", { type: "assumption" });
+  await rs.add("User hates meetings on Friday", { id: "friday" });
+  await rs.add("Team retro is weekly on Mondays at 10am PT", { id: "retro" });
+  await rs.add("Budget review is Thursday 3pm PT", { id: "budget" });
+  await rs.add("Alice PTO next Tuesday", { id: "pto", type: "assumption" });
+
+  // Add a simple edge: retro scheduling depends on knowing PTO.
+  await rs.update("retro", { summary: "Team retro is weekly on Mondays at 10am PT", reason: "depends on PTO" });
+  rs.state.raw["retro"].dependsOn = ["pto"];
 
   console.log("\n--- Retrieve (no LLM) ---");
   const retrieve = await rs.query("When should we schedule the retro?", { mode: "retrieve" });
@@ -44,6 +48,10 @@ async function main() {
   const totalNodes = Object.keys(rs.state.raw ?? {}).length;
   console.log(`context lines: ${lines.length} (nodes in state: ${totalNodes})`);
   console.log(lines.slice(0, 12).join("\n"));
+  const edgeNode = Object.values(rs.state.raw).find((n) => n.dependsOn && n.dependsOn.length);
+  if (edgeNode) {
+    console.log("Edges (sample):", `${edgeNode.id} depends_on ${edgeNode.dependsOn?.join(", ")}`);
+  }
 
   if (!apiKey) {
     console.log("\nPlanner step skipped (set OPENAI_API_KEY / GROK_API_KEY to enable).");
