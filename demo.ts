@@ -27,8 +27,7 @@ function tokenCount(text: string): number {
 }
 
 function rawDump(state: ReasonState): string {
-  const nodes = Object.values(state.state.raw ?? {});
-  return nodes.map((n) => `${n.type}:${n.id}:${n.summary ?? ""}`).join("\n");
+  return JSON.stringify(state.state.raw ?? {}, null, 2);
 }
 
 async function main() {
@@ -41,7 +40,7 @@ async function main() {
     apiKey,
     baseUrl,
     model,
-    maxTokens: 800,
+    maxTokens: 400,
   });
 
   // 1) Seed facts
