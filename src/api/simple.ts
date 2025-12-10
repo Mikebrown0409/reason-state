@@ -9,6 +9,8 @@ type SimpleOptions = {
   baseUrl?: string;
   maxTokens?: number; // Approximate char budget: maxTokens * 4
   fetcher?: typeof fetch;
+  vectorStore?: any;
+  vectorTopK?: number;
 };
 
 type AddOptions = {
@@ -82,7 +84,13 @@ export class ReasonStateSimple {
     opts: { mode?: QueryMode } = {}
   ): Promise<{ patches: Patch[]; state: EchoState; context?: string }> {
     const maxChars = (this.opts.maxTokens ?? 1000) * 4;
-    const ctx = buildContext(this.engine.snapshot, { mode: "balanced", maxChars });
+    const ctx = buildContext(this.engine.snapshot, {
+      mode: "balanced",
+      maxChars,
+      vectorStore: this.opts.vectorStore,
+      vectorTopK: this.opts.vectorTopK,
+      queryText: goal,
+    });
 
     if (opts.mode === "retrieve") {
       return { patches: [], state: this.engine.snapshot, context: ctx };

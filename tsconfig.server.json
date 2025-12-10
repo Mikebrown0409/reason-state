@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist/server",
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "typeRoots": ["./types", "./node_modules/@types"]
+  },
+  "include": ["apps/server/src", "src/api", "src/context", "src/engine", "src/tools", "src/agent", "types"],
+  "exclude": ["dist", "node_modules", "apps/demo", "demo", "src/main.tsx"]
+}
+

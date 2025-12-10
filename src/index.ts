@@ -3,3 +3,4 @@ export { ReasonState as ReasonStateAdvanced } from "./engine/ReasonState.js";
 export type { EchoState, NodeType, Patch, Checkpoint } from "./engine/types.js";
 export { applyPatches, retractAssumption, selfHealAndReplay } from "./engine/ReasonState.js";
 export { canExecute } from "./engine/reconciliation.js";
+export { InMemoryVectorStore } from "./context/vectorStore.js";

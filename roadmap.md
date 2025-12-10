@@ -1,44 +1,49 @@
-roadmap: reason-state pivot — JSON-first governed graph (10-hour target)
-owner: reason-state (Jarvis track) | scope: <1,000 LOC, TS-only, no new heavy deps
+## Roadmap (canonical)
+Owner: reason-state | Scope: JSON-first governed graph; TS-only; <1k LOC; no heavy deps.
 
-goals
-- [~] ship npm package “reason-state” v0.1.0-hack with structured JSON graph (no graph DB), append-only log + checkpoints (history + replay + Zod patch validation + checkpoint save/restore + log writer + auto-checkpointing landed; log replay helper added; finalize packaging still pending)
-- [ ] demo-ready: 45s Jarvis flow (Tokyo→Amsterdam retract; budget 4k↔4.5k) using real X/Grok + governed booking
-- [ ] showcase time-travel/replay UI: guided scenario (Tokyo→retract→Amsterdam) with per-step diffs, reused vs regenerated artifacts, determinism check, token/time savings
-- [~] LLM-driven patching: Grok 4.1 with deterministic context builder (summaries-only), strict system prompt with good/bad few-shot, summary-only patch path (LLM cannot write /raw), validated parse/backoff, engine-assigned IDs, node-shape validation/tests landed; multi-turn planning added with per-turn meta; agent-note summary added; remaining: richer governance across turns and broader live integration
-- [x] constraints: <10 deps (whitelist only), <200 LOC/file, <1,000 LOC total
-- [x] pillars: details/summary split, append-only patches, unknown vs assumption lifecycle, self-heal, replay determinism, governed actions, explicit activation (no embeddings)
+### Principles
+- Governance-first: append-only patches, no deletes, lineage required, self-heal on contradictions.
+- Deterministic: summaries-only context builder, token-budgeted, replay from log+checkpoints.
+- Real tools only: Grok 4.1 and real X search; fail loud if unavailable (no mocks).
+- Portability: JSON-native, no graph DB; storage driver pluggable (local SQLite/log, remote HTTP).
 
-critical path checklist (pivoted)
-- [x] 0) alignment & skeleton: scaffold done (MIT, pkg, tsconfig, README stub).
-- [~] 1) state schema & types: JSON model with fact/assumption/unknown/action/planning and lineage fields landed; edges (depends_on/contradicts/temporal), timestamps, richer status enums still pending.
-- [x] 2) patch/log/checkpoints: append-only history + Zod patch validation (no delete) + replay + save/restore checkpoint + auto-checkpoint interval + log writer + log replay helper done; next: package publish wiring.
-- [~] 2b) LLM orchestration: Grok 4.1 with strict prompt + few-shot; deterministic context builder (token-budgeted, summaries-only) feeds Grok; parse/validate/backoff of model patches; engine assigns IDs; /raw blocked for LLM; node-shape validation/tests done; multi-turn planning with meta logging added; agent-note summary added; simple + X agent smokes running. Remaining: governance interplay across turns in more complex flows and broader live integration coverage.
-- [~] 3) reconciliation & governance: dirty propagation via adjacency + contradiction edges; depends_on + temporal_after/temporal_before blocking/unblocking; contradiction sets resolved by recency (newest wins, others blocked/dirty); canExecute gates unknown/dirty/invalid assumptions; timestamps on nodes. Remaining: richer adjacency/timestamps usage, broader self-heal behaviors, and explicit retry/auto-remediation loop.
-- [x] 4) context builder: deterministic, token-budgeted prompt assembly from summaries (never details), priority buckets configurable; budget/truncation/topK determinism tests added. (Relevance/recency tuning beyond id-sort remains optional polish.)
-- [~] 5) tools (real only): `xSearch` uses real X (fail loud); booking real-ish (Stripe-test + calendar clash + governance gate + missing-dates unknown guard); Grok 4.1 only; simple/X agent smokes green; remaining: full live-agent run with X + governance DAG and persisted log.
-- [ ] 6) agent/orchestrator: JSON-native DAG runner (or LangGraph/Temporal-lite) with nodes: gate → researchX → planWithGrok → bookTravel → selfHeal → replay; checkpoints per turn; reuse artifacts on replay.
-- [ ] 7) demo flow & ui: guided scenario UI (Tokyo→retract→Amsterdam) with lineage-rich X posts/media, Grok plan, booking artifact; governance badge (blocked/clean with reasons); time-travel slider with per-step patch log, reused vs regenerated chips, determinism check, and token/time savings; “what the model saw” context snapshot (summaries-only, token-capped).
-- [~] 8) tests: determinism + Grok validation + node-shape validation + context-builder budget/determinism + reconciliation edges/timestamps (depends_on/temporal_before) + simple/X agent smokes added; integration replay harness added (simple agent, log replay, booking blocked). Still need full integration suite (Tokyo→retract→Amsterdam replay with hotel/flight assertions), governance gating assertions, token-savings assertions.
-- [~] 9) polish/docs/build: README env + .env.example + “what’s verified” section and strict system prompt doc updated; still need demo GIF placeholder, LOC audit, build/publish path, and tool fallback notes.
+### Near-term milestone — 0.2.0 “Adoption hardening”
+- Packaging: emit built JS+d.ts, update `exports` to `dist/*`, exclude demos from the package, add CHANGELOG.
+- API guarantees: document stable surface (`ReasonState`, `planAndAct`, `buildContext`, `facade` helpers) and invariants (append-only, validated patches, deterministic replay).
+- Zero-key path: default demos/tests run in retrieve-only mode when keys missing; clearly mark which tests are key-gated.
+- Persistence: doc and sample for storage drivers (local SQLite/log paths, remote HTTP driver), plus docker-compose for a tiny HTTP facade.
+- Retrieval quality: optional hybrid/embedding hook and ranker in `buildContext`; document pairing with a vector store.
+- Replay/governance: finish contradiction self-heal loop, cross-turn `canExecute`, richer statuses; stabilize node shape enums.
+- Deterministic replay test: Tokyo→retract→Amsterdam (flights reused, hotels changed; raw+summary match).
+- Docs: failure policy (no mocks), env table, “what’s verified” section, GIF/screenshot placeholder.
 
-risk & mitigation
-- Real data: enforce real X/Grok; no fallback; fail loud if keys missing.
-- Time/LOC: keep JSON-native, no graph DB; reuse existing code where sane; keep files <200 LOC.
-- Flakiness: governance gate before actions; watchdog/backoff on invalid patches; checkpoints to recover.
-- Demo variance: cache/reuse valid artifacts on replay; log retrieval context for determinism audits.
+### Mid-term — Replay + governance completeness
+- JSON-native DAG runner (gate → researchX → planWithGrok → bookTravel → selfHeal → replay) with checkpoints per turn and artifact reuse on replay.
+- Broader self-heal behaviors and explicit retry/backoff on invalid patches.
+- Governance gating assertions in tests (unknown/dirty/invalid assumptions block actions).
 
-open questions / confirmations
-- Grok/X keys available? (no fallback; fail loud)
-- Booking: acceptable to use Stripe-test + calendar mock as “real-ish”?
-- Deployment target? (local demo vs serverless persistence)
-- UX: minimal but must show lineage (sourceType/sourceId) and blockers clearly.
+### Retrieval quality track
+- Pluggable embedding/hybrid retrieval option for larger memories; ranking integration test on LongMemEval/LoCoMo (beyond tiny slices).
+- Context-builder tuning: relevance/recency ranker hook, overflow accounting, token-savings assertions.
 
-win focus (judges)
-- Live, governed, replayable agent (Tokyo→retract→Amsterdam) with real data.
-- Governance: blocked on unknown/dirty, self-heal contradictions, replay determinism proof.
-- Observability: timeline from log, lineage-rich previews, metrics (blocked actions, self-heal, token savings).
+### Studio (Debugger UI) v1
+- Implement the spec: left inputs/governance pill, center timeline carousel with rollback/recompute, right panel tabs (state diff, context, replay log with determinism badge).
+- Manual smoke checklist (scrub, rollback, recompute, open tabs) until visuals stabilize; add GIFs/screenshots to README.
 
-competitiveness note
-- Lean JSON-native engine with graph semantics, determinism, and governance; real tools only, no mocks; replay + token-savings story differentiates from naive RAG/agent demos.
+### Integrations & examples
+- BYO-tools agent example (ReasonState as governed memory only).
+- LangGraph/Temporal-lite style example with rollback/replay/unknown handling.
+- HTTP facade example + docker-compose for quick try.
+
+### Benchmarks & observability
+- Rerun LongMemEval/LoCoMo on meaningful slices (not single-sample), publish token/recall metrics and latency.
+- Metrics surfaced in Studio: blocked actions, self-heal events, token savings vs raw.
+
+### Release checklist (use for each cut)
+- Package builds and imports clean (dist JS + d.ts; exports tested with ESM+CJS consumers).
+- API guarantees documented; breaking changes noted in CHANGELOG.
+- Demos/tests: keyless path passes; key-gated suites marked/skipped when keys absent.
+- Governance tests green: determinism, replay, contradiction resolution, gating on unknown/dirty/invalid assumptions.
+- UI manual smoke done; screenshots/GIF updated.
+- Docs updated: env table, failure policy, storage driver guide, integrations links.
 

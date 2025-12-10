@@ -1,21 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { grokPlanWithContext } from "../src/tools/grokChat.js";
-import { createEmptyState } from "../src/engine/types.js";
+import { grokPlanWithContext } from "../../src/tools/grokChat.js";
+import { createEmptyState } from "../../src/engine/types.js";
 
-describe("live grok diagnostic (small context)", () => {
+const hasKey =
+  !!process.env.GROK_API_KEY ||
+  !!process.env.VITE_GROK_API_KEY ||
+  typeof (globalThis as any).__VITE_GROK_API_KEY__ !== "undefined";
+
+describe.skipIf(!hasKey)("live grok diagnostic (small context)", () => {
   it(
     "logs outbound context and inbound raw/patches for debugging",
     { timeout: 30000 },
     async () => {
-      const key =
-        process.env.GROK_API_KEY ||
-        process.env.VITE_GROK_API_KEY ||
-        (globalThis as any).__VITE_GROK_API_KEY__;
-      if (!key) {
-        console.warn("Skipping: GROK_API_KEY missing");
-        return;
-      }
-
       const state = createEmptyState();
       state.raw["goal"] = {
         id: "goal",
