@@ -30,7 +30,7 @@ await rs.update("node-id-123", { retracted: true, reason: "New policy" });
 ```bash
 npm run demo
 ```
-Opens a minimal playground that ingests a few facts, shows balanced context, and runs a sample plan with your API key. (If no key set, it still shows retrieval mode.)
+CLI demo: ingests a few facts, shows balanced retrieval-only context, and if an API key is present runs one planner turn. Works without keys (planner step skipped).
 
 ## Why use it
 - Token-efficient context (balanced mode keeps blockers/goals/recent first; summarizes overflow).

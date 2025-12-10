@@ -67,6 +67,7 @@
     "test": "tsx tests/determinism.test.ts",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
+    "demo": "tsx demo.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
     "lint:types": "tsc --noEmit",
     "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\"",
