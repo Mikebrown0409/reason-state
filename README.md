@@ -32,6 +32,10 @@ const { patches, state, context } = await rs.query("When should we schedule the 
 await rs.update("node-id-123", { retracted: true, reason: "New policy" });
 ```
 
+### Browser vs Node
+- Node: default persistence uses SQLite + log.
+- Browser/Vite/Next: defaults to in-memory storage (no persistence across refresh). For persistence, pass a custom remote storage driver (e.g., HTTP-based).
+
 ### Optional: core/advanced APIs
 - `ReasonStateAdvanced` — full engine and `applyPatches` (named export).
 - `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree` (advanced).

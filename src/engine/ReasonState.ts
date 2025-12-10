@@ -77,6 +77,7 @@ import {
   propagateDirty,
 } from "./reconciliation.js";
 import { appendToLogSync, loadCheckpoint, readLog, saveCheckpoint } from "./storage.js";
+import { memoryStorage } from "./storageMemory.js";
 import type {
   EchoState,
   Patch,
@@ -96,12 +97,19 @@ export class ReasonState {
 
   constructor(options: ReasonStateOptions = {}, initialState?: EchoState) {
     this.options = options;
-    this.storage = options.storage ?? {
-      saveCheckpoint,
-      loadCheckpoint,
-      appendToLogSync,
-      readLog,
-    };
+    const isBrowser = typeof window !== "undefined";
+    if (options.storage) {
+      this.storage = options.storage;
+    } else if (isBrowser) {
+      this.storage = memoryStorage;
+    } else {
+      this.storage = {
+        saveCheckpoint,
+        loadCheckpoint,
+        appendToLogSync,
+        readLog,
+      };
+    }
     this.state = initialState ?? {
       raw: {},
       summary: {},
