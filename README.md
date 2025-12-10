@@ -21,8 +21,12 @@ const rs = new ReasonState({
 // 1) Add
 await rs.add("User hates meetings on Friday");
 
-// 2) Query (auto-builds balanced context, calls planner, applies patches)
-const { patches, state } = await rs.query("When should we schedule the retro?");
+// 2) Query
+// - mode: "plan" (default) calls planner + applies patches
+// - mode: "retrieve" returns pruned context without LLM call
+const { patches, state, context } = await rs.query("When should we schedule the retro?", {
+  mode: "plan",
+});
 
 // 3) Update/retract
 await rs.update("node-id-123", { retracted: true, reason: "New policy" });

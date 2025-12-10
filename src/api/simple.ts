@@ -24,6 +24,8 @@ type UpdateOptions = {
   reason?: string;
 };
 
+type QueryMode = "plan" | "retrieve";
+
 export class ReasonStateSimple {
   private engine: ReasonState;
   private opts: SimpleOptions;
@@ -75,9 +77,17 @@ export class ReasonStateSimple {
   /**
    * Query with a provider-neutral planner (OpenAI-compatible; works with Groq, OpenAI, Anthropic via base/model).
    */
-  async query(goal: string): Promise<{ patches: Patch[]; state: EchoState }> {
+  async query(
+    goal: string,
+    opts: { mode?: QueryMode } = {}
+  ): Promise<{ patches: Patch[]; state: EchoState; context?: string }> {
     const maxChars = (this.opts.maxTokens ?? 1000) * 4;
     const ctx = buildContext(this.engine.snapshot, { mode: "balanced", maxChars });
+
+    if (opts.mode === "retrieve") {
+      return { patches: [], state: this.engine.snapshot, context: ctx };
+    }
+
     const res = await openaiCompatiblePlanWithContext(
       this.engine.snapshot,
       goal,
@@ -91,7 +101,7 @@ export class ReasonStateSimple {
     if (res.patches?.length) {
       this.engine.applyPatches(res.patches);
     }
-    return { patches: res.patches, state: this.engine.snapshot };
+    return { patches: res.patches, state: this.engine.snapshot, context: ctx };
   }
 
   get state(): EchoState {
