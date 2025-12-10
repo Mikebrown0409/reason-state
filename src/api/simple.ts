@@ -48,7 +48,6 @@ export class ReasonStateSimple {
         type: opts.type ?? "fact",
         summary,
         details: typeof textOrObj === "string" ? { text: textOrObj } : textOrObj,
-        confidence: opts.confidence,
       },
     };
     this.engine.applyPatches([patch]);
