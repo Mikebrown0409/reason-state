@@ -10,6 +10,8 @@ type BucketSelector = {
 
 type ContextMode = "deterministic" | "balanced" | "aggressive";
 
+import type { VectorStore } from "./vectorStore.js";
+
 type ContextOptions = {
   maxChars?: number;
   includeTimeline?: boolean;
@@ -18,6 +20,9 @@ type ContextOptions = {
   mode?: ContextMode;
   goalId?: string;
   ranker?: (node: StateNode) => number; // optional custom ranker for aggressive mode
+  vectorStore?: VectorStore;
+  vectorTopK?: number;
+  queryText?: string; // used for vector retrieval; defaults to none (no vector call)
 };
 
 const DEFAULT_MAX_CHARS = 2500;
@@ -235,7 +240,8 @@ function buildBalancedSections(
   goalId: string | undefined,
   maxChars: number,
   mode: ContextMode,
-  ranker?: (node: StateNode) => number
+  ranker?: (node: StateNode) => number,
+  vectorHits?: Set<string>
 ): { body: string; used: number } {
   const nodes = Object.values(state.raw ?? {});
   const sorted = sortByRecencyThenId(nodes);
@@ -270,7 +276,15 @@ function buildBalancedSections(
     .sort((a, b) => b.score - a.score || a.node.id.localeCompare(b.node.id))
     .map((s) => s.node);
 
+  const vectorMatches =
+    vectorHits && vectorHits.size > 0
+      ? sorted.filter((n) => vectorHits.has(n.id))
+      : [];
+
   const sectionConfigs: SectionConfig[] = [
+    vectorMatches.length
+      ? { title: "Vector matches", items: vectorMatches, minCap: 5, maxCap: 50 }
+      : { title: "", items: [] },
     { title: "Blockers", items: blockers, minCap: 5, maxCap: 50 },
     { title: "Goals/constraints", items: goalChain, minCap: 5, maxCap: 40 },
     { title: "Recent changes", items: recent, minCap: 5, maxCap: 20 },
@@ -386,12 +400,23 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
     return appendTimeline(body, state, includeTimeline, timelineTail, maxChars);
   }
 
+  let vectorHitSet: Set<string> | undefined;
+  if (opts.vectorStore && opts.queryText) {
+    try {
+      const hits = opts.vectorStore.query(opts.queryText, opts.vectorTopK ?? 20);
+      vectorHitSet = new Set(hits.map((h) => h.id));
+    } catch {
+      vectorHitSet = undefined; // swallow errors to keep default path deterministic
+    }
+  }
+
   const { body, used } = buildBalancedSections(
     state,
     opts.goalId,
     maxChars,
     mode,
-    mode === "aggressive" ? opts.ranker : undefined
+    mode === "aggressive" ? opts.ranker : undefined,
+    vectorHitSet
   );
   return appendTimeline(body, state, includeTimeline, timelineTail, maxChars, used);
 }

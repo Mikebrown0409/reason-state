@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { runSimpleAgent } from "../examples/agents/simpleAgent.js";
+import { runSimpleAgent } from "../../examples/agents/simpleAgent.js";
 
-describe("latency diagnostic (simple agent end-to-end)", () => {
+const hasKey =
+  !!process.env.GROK_API_KEY ||
+  !!process.env.VITE_GROK_API_KEY ||
+  !!process.env.OPENAI_API_KEY ||
+  !!process.env.VITE_OPENAI_API_KEY;
+
+describe.skipIf(!hasKey)("latency diagnostic (simple agent end-to-end)", () => {
   it("measures Grok+booking wall time", { timeout: 60000 }, async () => {
     const start = Date.now();
     const res = await runSimpleAgent("Tokyo", 4000);

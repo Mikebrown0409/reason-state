@@ -1,6 +1,6 @@
 {
   "name": "reason-state",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "private": false,
   "license": "MIT",
@@ -8,36 +8,67 @@
     "type": "git",
     "url": "https://github.com/Mikebrown0409/reason-state"
   },
-  "main": "./src/api/facade.ts",
-  "module": "./src/api/facade.ts",
-  "types": "./src/api/facade.ts",
+  "main": "./dist/src/index.js",
+  "module": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "exports": {
-    ".": "./src/api/facade.ts",
-    "./agent/planAndAct": "./src/agent/planAndAct.ts",
-    "./agent/plan": "./src/agent/planAndAct.ts",
-    "./api": "./src/api/facade.ts",
-    "./context": "./src/context/contextBuilder.ts",
-    "./engine": "./src/engine/ReasonState.ts",
-    "./tools/grokChat": "./src/tools/grokChat.ts",
-    "./tools/openaiPlanner": "./src/tools/openaiPlanner.ts",
-    "./tools/anthropicPlanner": "./src/tools/anthropicPlanner.ts",
-    "./tools/openaiCompatiblePlanner": "./src/tools/openaiCompatiblePlanner.ts",
-    "./engine/storageRemote": "./src/engine/storageRemote.ts"
+    ".": {
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    },
+    "./agent/planAndAct": {
+      "import": "./dist/src/agent/planAndAct.js",
+      "types": "./dist/src/agent/planAndAct.d.ts"
+    },
+    "./agent/plan": {
+      "import": "./dist/src/agent/planAndAct.js",
+      "types": "./dist/src/agent/planAndAct.d.ts"
+    },
+    "./api": {
+      "import": "./dist/src/api/facade.js",
+      "types": "./dist/src/api/facade.d.ts"
+    },
+    "./context": {
+      "import": "./dist/src/context/contextBuilder.js",
+      "types": "./dist/src/context/contextBuilder.d.ts"
+    },
+    "./context/vectorStore": {
+      "import": "./dist/src/context/vectorStore.js",
+      "types": "./dist/src/context/vectorStore.d.ts"
+    },
+    "./engine": {
+      "import": "./dist/src/engine/ReasonState.js",
+      "types": "./dist/src/engine/ReasonState.d.ts"
+    },
+    "./engine/storageRemote": {
+      "import": "./dist/src/engine/storageRemote.js",
+      "types": "./dist/src/engine/storageRemote.d.ts"
+    },
+    "./tools/grokChat": {
+      "import": "./dist/src/tools/grokChat.js",
+      "types": "./dist/src/tools/grokChat.d.ts"
+    },
+    "./tools/openaiPlanner": {
+      "import": "./dist/src/tools/openaiPlanner.js",
+      "types": "./dist/src/tools/openaiPlanner.d.ts"
+    },
+    "./tools/anthropicPlanner": {
+      "import": "./dist/src/tools/anthropicPlanner.js",
+      "types": "./dist/src/tools/anthropicPlanner.d.ts"
+    },
+    "./tools/openaiCompatiblePlanner": {
+      "import": "./dist/src/tools/openaiCompatiblePlanner.js",
+      "types": "./dist/src/tools/openaiCompatiblePlanner.d.ts"
+    }
   },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist/",
-    "src/agent/",
-    "src/api/",
-    "src/engine/",
-    "src/context/",
-    "src/tools/grokChat.ts",
-    "src/tools/openaiPlanner.ts",
-    "src/tools/anthropicPlanner.ts",
-    "src/tools/openaiCompatiblePlanner.ts",
-    "README.md"
+    "dist/src/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "keywords": [
     "ai-agents",
@@ -63,11 +94,18 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:all": "npm run build && npm run build:server",
+    "build:ui": "vite build",
+    "prepublishOnly": "npm run build",
+    "dev:server": "tsx apps/server/src/index.ts",
+    "start:server": "node dist/server/index.js",
     "test": "tsx tests/determinism.test.ts",
+    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
-    "demo": "tsx demo.ts",
+    "demo": "tsx apps/demo/demo.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
     "lint:types": "tsc --noEmit",
     "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\"",

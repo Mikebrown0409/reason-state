@@ -2,6 +2,14 @@
 node_modules
 dist
 coverage
+.cache
+.eslintcache
+.turbo
+.vite
+tmp
+logs
+*.log
+dist/server
 
 # Env/secrets
 .env

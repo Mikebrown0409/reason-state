@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { buildContext } from "../src/context/contextBuilder.js";
-import { grokChat } from "../src/tools/grokChat.js";
-import type { EchoState } from "../src/engine/types.js";
+import { buildContext } from "../../src/context/contextBuilder.js";
+import { grokChat } from "../../src/tools/grokChat.js";
+import type { EchoState } from "../../src/engine/types.js";
 
 const hasKey =
   !!process.env.GROK_API_KEY ||

@@ -1,5 +1,5 @@
 import "dotenv/config";
-import ReasonState from "./src/index.js";
+import ReasonState from "../../src/index.js";
 import { encoding_for_model } from "@dqbd/tiktoken";
 
 function resolveKeys() {
@@ -34,7 +34,7 @@ async function main() {
   const { apiKey, baseUrl, model } = resolveKeys();
 
   console.log("reason-state demo — retract + heal\n");
-  console.log(apiKey ? "Planner: enabled (API key found)" : "Planner: skipped (no API key)");
+  console.log(apiKey ? "Planner: enabled (API key found)" : "Planner: keyless mode (retrieve-only + canned)");
 
   const rs = new ReasonState({
     apiKey,
@@ -56,7 +56,9 @@ async function main() {
   let planAnswer = "(planner skipped — no API key)";
   if (!apiKey) {
     const retrieve = await rs.query("When should we schedule the retro?", { mode: "retrieve" });
-    console.log(retrieve.context?.slice(0, 200) + "...");
+    const canned = `Canned suggestion (no API key): aim for Monday 10am PT, avoid Friday conflicts; retract PTO if canceled.`;
+    console.log((retrieve.context?.slice(0, 200) ?? "") + "...");
+    console.log(canned);
   } else {
     const plan = await rs.query("When should we schedule the retro?");
     planAnswer = plan.patches?.length ? JSON.stringify(plan.patches) : plan.context ?? "";
@@ -70,7 +72,9 @@ async function main() {
   console.log("\n2) Retracted 'Alice PTO' — same question, no reroll");
   if (!apiKey) {
     const retrieve2 = await rs.query("When should we schedule the retro?", { mode: "retrieve" });
-    console.log(retrieve2.context?.slice(0, 200) + "...");
+    const canned2 = `Canned follow-up: with PTO retracted, keep Monday 10am PT; note Alice is available.`;
+    console.log((retrieve2.context?.slice(0, 200) ?? "") + "...");
+    console.log(canned2);
   } else {
     const plan2 = await rs.query("When should we schedule the retro?");
     const healed = plan2.patches?.length ? JSON.stringify(plan2.patches) : plan2.context ?? "";
