@@ -8,37 +8,30 @@ Install:
 npm install reason-state
 ```
 
-### Core flow (production)
+### 3-function quickstart (simple)
 ```ts
-import { addNode, updateNode, rollbackSubtree } from "reason-state/api/facade.js";
-import { applyPatches } from "reason-state/engine/ReasonState.js";
-import { buildContext } from "reason-state/context/contextBuilder.js";
+import { ReasonStateSimple } from "reason-state";
 
-// 1) Write state
-let state = addNode({ id: "task", type: "planning", summary: "Refactor module" });
-state = updateNode("task", { summary: "Refactor payment module" }, {}, state);
+const rs = new ReasonStateSimple({
+  apiKey: process.env.OPENAI_API_KEY,          // works with OpenAI/Groq-compatible endpoints
+  model: "gpt-4o-mini",                        // or your provider model
+  maxTokens: 2500,                             // ~10k chars budget
+});
 
-// 2) Build deterministic, summaries-only context for your model (optional but recommended)
-const context = buildContext(state);
-// ...call your LLM/tool with `context`...
+// 1) Add
+await rs.add("User hates meetings on Friday");
 
-// 3) Apply returned patches (from your model/tool)
-const modelPatches = [
-  { op: "add", path: "/summary/agent-note", value: "Next: split payment service" },
-];
-state = applyPatches(modelPatches, state);
+// 2) Query (auto-builds balanced context, calls planner, applies patches)
+const { patches, state } = await rs.query("When should we schedule the retro?");
 
-// 4) Recovery/determinism tools
-// rollbackSubtree("task", ...) or replayFromLog(...) when needed
+// 3) Update/retract
+await rs.update("node-id-123", { retracted: true, reason: "New policy" });
 ```
 
-### Facade (core API)
-```ts
-import { addNode, updateNode, recompute, rollbackSubtree } from "reason-state/api/facade.js";
-```
-- `addNode/updateNode`: validated, append-only patches.
-- `recompute`: optional semantic plan (built-in prompt, agent-note fallback).
-- `rollbackSubtree`: temporal/tool replay for a specific node id (you supply the tool).
+### Optional: core/advanced APIs
+- `ReasonState` — full engine and `applyPatches`.
+- `facade` — `addNode`, `updateNode`, `recompute`, `rollbackSubtree` (advanced).
+- Planners: `grokChat.grokPlanWithContext`, `openaiPlanner`, `anthropicPlanner`, `openaiCompatiblePlanner`.
 
 ## What’s in the box
 - JSON-first governed graph: raw vs summary, lineage, timestamps, edges (`depends_on`, `contradicts`, `temporalBefore/After`), no deletes.
