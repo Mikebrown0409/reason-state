@@ -1,14 +1,14 @@
 :root {
   color-scheme: dark;
-  --bg: #070a12;
-  --panel: #0e1422;
-  --panel-strong: #162136;
-  --text: #f8fafc;
-  --muted: #b3bfd6;
-  --accent: #7cf3ff;
-  --border: #2c3a52;
-  --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-  --glow: 0 0 22px rgba(124, 243, 255, 0.2);
+  --bg: #050607;
+  --panel: #0c0d11;
+  --panel-strong: #11131a;
+  --text: #f3f4f6;
+  --muted: #9aa0ad;
+  --accent: #f1f5f9;
+  --border: #1e1f26;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 22px rgba(255, 255, 255, 0.12);
 }
 
 * {
@@ -190,14 +190,14 @@ html {
 }
 
 .dot.filled {
-  background: #f5f7fb;
-  box-shadow: 0 0 8px rgba(124, 243, 255, 0.45);
+  background: #f8fafc;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
   transform: scale(1.05);
 }
 
 .dot.dim {
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .nav-btn {
@@ -208,7 +208,7 @@ html {
   height: 32px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: rgba(15, 21, 36, 0.8);
+  background: rgba(12, 13, 17, 0.85);
   color: var(--text);
   cursor: pointer;
   z-index: 2;
@@ -224,7 +224,7 @@ html {
 
 .card {
   width: 280px;
-  background: #1b2940;
+  background: #11141c;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px 16px;
@@ -240,11 +240,11 @@ html {
 }
 
 .card.active {
-  border-color: var(--accent);
+  border-color: #f8fafc;
   transform: translateY(-2px) scale(1);
   opacity: 1;
   filter: none;
-  box-shadow: var(--glow), var(--shadow);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), var(--shadow);
 }
 
 .card h3 {
@@ -266,7 +266,7 @@ html {
 .node-chip {
   padding: 6px 10px;
   border-radius: 10px;
-  background: #0b0f18;
+  background: #0b0c11;
   border: 1px solid var(--border);
   font-size: 12px;
 }

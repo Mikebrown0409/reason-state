@@ -48,8 +48,10 @@ export function Timeline(props: Props) {
         const clamped = Math.min(Math.max(offset, -2), 2);
         const translate = clamped * 220; // space so edges of neighbors peek
         const scale = clamped === 0 ? 1 : clamped === 1 || clamped === -1 ? 0.94 : 0.9;
-        const opacity = clamped === 0 ? 1 : clamped === 1 || clamped === -1 ? 0.6 : 0.35;
+        // keep depth via scale/blur, but cards stay fully opaque
+        const opacity = 1;
         const blur = clamped === 0 ? "0px" : clamped === 1 || clamped === -1 ? "0.4px" : "0.9px";
+        const zIndex = clamped === 0 ? 20 : 20 - Math.abs(clamped);
         const rotate = 0;
         const hide = Math.abs(offset) > 2;
         const nodes = Object.values(step.state.raw);
@@ -66,6 +68,7 @@ export function Timeline(props: Props) {
                 : `translateX(${translate}px) rotateY(${rotate}deg) scale(${scale})`,
               opacity: hide ? 0 : opacity,
               filter: hide ? "blur(2px)" : `blur(${blur})`,
+              zIndex,
             }}
           >
             <h3>{step.label}</h3>
