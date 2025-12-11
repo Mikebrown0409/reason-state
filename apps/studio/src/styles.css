@@ -175,26 +175,29 @@ html {
 .dot-grid {
   padding: 0 24px 12px;
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 10px;
-  grid-template-rows: repeat(3, 8px);
-  grid-template-columns: repeat(auto-fit, 10px);
-  gap: 4px 8px;
+  gap: 2px;
   justify-content: center;
+  transform: scale(0.95);
 }
 
 .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: transparent;
+  box-shadow: none;
   transition: background 160ms ease, transform 160ms ease;
 }
 
 .dot.filled {
   background: #f5f7fb;
+  box-shadow: 0 0 8px rgba(124, 243, 255, 0.45);
   transform: scale(1.05);
+}
+
+.dot.dim {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .nav-btn {
