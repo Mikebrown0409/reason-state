@@ -59,6 +59,17 @@ export default function App() {
           </div>
         </div>
         <Timeline steps={steps} active={active} onSelect={setActive} />
+        <div className="progress-wrap">
+          <div className="progress-track">
+            <div
+              className="progress-fill"
+              style={{
+                width:
+                  steps.length <= 1 ? "100%" : `${(active / Math.max(steps.length - 1, 1)) * 100}%`,
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="panel right" style={{ padding: showRight ? 16 : 6 }}>
