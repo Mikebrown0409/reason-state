@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { StudioStep } from "../sampleTrace";
 
 type Props = {
@@ -8,20 +8,70 @@ type Props = {
 };
 
 export function Timeline(props: Props) {
+  const total = props.steps.length;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const wheelCooldown = useRef(false);
+  const wheelAccumulator = useRef(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (wheelCooldown.current) return;
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      wheelAccumulator.current += delta;
+      const stepThreshold = 4;
+      if (wheelAccumulator.current >= stepThreshold) {
+        props.onSelect((props.active + 1) % total);
+        wheelAccumulator.current = 0;
+      } else if (wheelAccumulator.current <= -stepThreshold) {
+        props.onSelect((props.active - 1 + total) % total);
+        wheelAccumulator.current = 0;
+      }
+      wheelCooldown.current = true;
+      setTimeout(() => {
+        wheelCooldown.current = false;
+      }, 60);
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [props.active, props.onSelect, total]);
+
   return (
-    <div className="carousel">
-      {props.steps.map((step, idx) => (
-        <div
-          key={idx}
-          className={`card ${props.active === idx ? "active" : ""}`}
-          onClick={() => props.onSelect(idx)}
-        >
-          <h3>{step.label}</h3>
-          <div className="muted">Patches: {step.patches.length}</div>
-          <div className="chips-row" style={{ marginTop: 8 }}>
-            {Object.values(step.state.raw)
-              .slice(0, 6)
-              .map((node) => (
+    <div className="carousel" ref={containerRef}>
+      {props.steps.map((step, idx) => {
+        const rawOffset = idx - props.active;
+        let offset = ((rawOffset % total) + total) % total; // 0..total-1
+        if (offset > total / 2) offset -= total;
+        const clamped = Math.min(Math.max(offset, -2), 2);
+        const translate = clamped * 220; // space so edges of neighbors peek
+        const scale = clamped === 0 ? 1 : clamped === 1 || clamped === -1 ? 0.94 : 0.9;
+        const opacity = clamped === 0 ? 1 : clamped === 1 || clamped === -1 ? 0.6 : 0.35;
+        const blur = clamped === 0 ? "0px" : clamped === 1 || clamped === -1 ? "0.4px" : "0.9px";
+        const rotate = 0;
+        const hide = Math.abs(offset) > 2;
+        const nodes = Object.values(step.state.raw);
+        const shown = nodes.slice(0, 3);
+        const overflow = nodes.length - shown.length;
+        return (
+          <div
+            key={idx}
+            className={`card ${props.active === idx ? "active" : ""}`}
+            onClick={() => props.onSelect(idx)}
+            style={{
+              transform: hide
+                ? "translateZ(-400px) scale(0.8)"
+                : `translateX(${translate}px) rotateY(${rotate}deg) scale(${scale})`,
+              opacity: hide ? 0 : opacity,
+              filter: hide ? "blur(2px)" : `blur(${blur})`,
+            }}
+          >
+            <h3>{step.label}</h3>
+            <div className="muted">Patches: {step.patches.length}</div>
+            <div className="chips-row" style={{ marginTop: 10 }}>
+              {shown.map((node) => (
                 <div
                   key={node.id}
                   className={`node-chip ${node.status === "blocked" ? "blocked" : ""} ${
@@ -31,9 +81,11 @@ export function Timeline(props: Props) {
                   {node.type}: {node.summary ?? node.id}
                 </div>
               ))}
+              {overflow > 0 && <div className="node-chip muted">+{overflow} more</div>}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

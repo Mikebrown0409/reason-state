@@ -40,24 +40,29 @@ export function LeftPanel(props: Props) {
 
       <div className="section">
         <h4>Modes</h4>
-        <div className="chips">
+        <div className="segmented">
           {modes.map((m) => (
             <button
               key={m}
-              className={`chip ${props.mode === m ? "active" : ""}`}
+              className={props.mode === m ? "active" : ""}
               onClick={() => props.onModeChange(m)}
             >
               {m}
             </button>
           ))}
         </div>
-        <div style={{ marginTop: 8 }}>
+        <div className="toggle-row">
+          <div className="muted" style={{ fontSize: 12 }}>
+            Vector
+          </div>
           <button
-            className={`chip ${props.vectorEnabled ? "active" : ""}`}
+            className={`toggle ${props.vectorEnabled ? "on" : ""}`}
             onClick={() => props.onVectorToggle(!props.vectorEnabled)}
-          >
-            Vector toggle {props.vectorEnabled ? "on" : "off"}
-          </button>
+            aria-label="Toggle vector"
+          />
+          <div className="muted" style={{ fontSize: 12 }}>
+            {props.vectorEnabled ? "on" : "off"}
+          </div>
         </div>
       </div>
 

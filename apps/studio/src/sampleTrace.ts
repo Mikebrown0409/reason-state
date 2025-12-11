@@ -47,8 +47,22 @@ const patches2: Patch[] = [
   { op: "replace", path: "/summary/pto", value: "assumption retracted: Alice PTO canceled" },
 ];
 
+const step3State: EchoState = {
+  ...step2State,
+  history: [...step2State.history],
+};
+step3State.raw = {
+  ...step2State.raw,
+  venue: { id: "venue", type: "fact", summary: "Venue booked: Monday 10am PT", status: "open" },
+};
+
+const patches3: Patch[] = [
+  { op: "add", path: "/summary/venue", value: "fact: Venue booked for Monday 10am PT" },
+];
+
 export const sampleTrace: StudioStep[] = [
-  { label: "Turn 1", state: step1State, patches: patches1 },
-  { label: "Turn 2", state: step2State, patches: patches2 },
+  { label: "Turn 1 — Plan", state: step1State, patches: patches1 },
+  { label: "Turn 2 — Retract", state: step2State, patches: patches2 },
+  { label: "Turn 3 — Book", state: step3State, patches: patches3 },
 ];
 
