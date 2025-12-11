@@ -59,16 +59,12 @@ export default function App() {
           </div>
         </div>
         <Timeline steps={steps} active={active} onSelect={setActive} />
-        <div className="progress-wrap">
-          <div className="progress-track">
-            <div
-              className="progress-fill"
-              style={{
-                width:
-                  steps.length <= 1 ? "100%" : `${(active / Math.max(steps.length - 1, 1)) * 100}%`,
-              }}
-            />
-          </div>
+        <div className="dot-grid">
+          {steps.map((_, col) =>
+            Array.from({ length: 6 }).map((_, idx) => (
+              <div key={`${col}-${idx}`} className={`dot ${col <= active ? "filled" : ""}`} />
+            ))
+          )}
         </div>
       </div>
 
