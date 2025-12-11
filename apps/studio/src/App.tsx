@@ -6,6 +6,8 @@ import { RightPanel } from "./components/RightPanel";
 import { sampleTrace } from "./sampleTrace";
 
 export default function App() {
+  const [showLeft, setShowLeft] = useState(true);
+  const [showRight, setShowRight] = useState(true);
   const [active, setActive] = useState(0);
   const [goal, setGoal] = useState("When should we schedule the retro?");
   const [mode, setMode] = useState<"balanced" | "aggressive" | "deterministic">("balanced");
@@ -18,19 +20,31 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
-      <LeftPanel
-        goal={goal}
-        onGoalChange={setGoal}
-        mode={mode}
-        onModeChange={setMode}
-        vectorEnabled={vectorEnabled}
-        onVectorToggle={setVectorEnabled}
-        onRun={() => console.log("Run (stub)", { goal, mode, vectorEnabled })}
-        onRetrieve={() => console.log("Retrieve-only (stub)", { goal })}
-        metrics={metrics}
-        governance="Clean"
-      />
+    <div
+      className="app"
+      style={{
+        gridTemplateColumns: `${showLeft ? "280px" : "28px"} 1fr ${showRight ? "360px" : "28px"}`,
+      }}
+    >
+      <div className="panel" style={{ padding: showLeft ? 16 : 6 }}>
+        {showLeft ? (
+          <LeftPanel
+            goal={goal}
+            onGoalChange={setGoal}
+            mode={mode}
+            onModeChange={setMode}
+            vectorEnabled={vectorEnabled}
+            onVectorToggle={setVectorEnabled}
+            onRun={() => console.log("Run (stub)", { goal, mode, vectorEnabled })}
+            onRetrieve={() => console.log("Retrieve-only (stub)", { goal })}
+            metrics={metrics}
+            governance="Clean"
+          />
+        ) : null}
+        <button className="collapse-btn" onClick={() => setShowLeft((v) => !v)}>
+          {showLeft ? "‹" : "›"}
+        </button>
+      </div>
 
       <div className="main">
         <div className="header">
@@ -47,7 +61,12 @@ export default function App() {
         <Timeline steps={steps} active={active} onSelect={setActive} />
       </div>
 
-      <RightPanel steps={steps} active={active} />
+      <div className="panel right" style={{ padding: showRight ? 16 : 6 }}>
+        {showRight ? <RightPanel steps={steps} active={active} /> : null}
+        <button className="collapse-btn" onClick={() => setShowRight((v) => !v)}>
+          {showRight ? "›" : "‹"}
+        </button>
+      </div>
     </div>
   );
 }

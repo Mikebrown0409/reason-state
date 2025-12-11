@@ -1,12 +1,12 @@
 :root {
   color-scheme: dark;
-  --bg: #0b0b0f;
-  --panel: #12121a;
-  --panel-strong: #161622;
-  --text: #f2f4f8;
-  --muted: #9aa3b5;
+  --bg: #040507;
+  --panel: #0c0f16;
+  --panel-strong: #0f1320;
+  --text: #f4f6fb;
+  --muted: #97a3b8;
   --accent: #7cf3ff;
-  --border: #1f2330;
+  --border: #1b2334;
   --success: #3de58f;
   --warn: #f0c674;
 }
@@ -24,9 +24,10 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 280px 1fr 420px;
+  grid-template-columns: 280px 1fr 360px;
   height: 100vh;
   overflow: hidden;
+  transition: grid-template-columns 180ms ease;
 }
 
 .panel {
@@ -45,6 +46,15 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.collapse-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
 }
 
 .badge {
@@ -142,25 +152,30 @@ body {
 
 .carousel {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding: 8px 4px 12px;
+  scroll-snap-type: x mandatory;
 }
 
 .card {
-  min-width: 260px;
+  min-width: 320px;
   background: var(--panel-strong);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 12px;
+  padding: 14px;
   flex-shrink: 0;
   cursor: pointer;
-  transition: border-color 150ms ease, transform 150ms ease;
+  transition: border-color 150ms ease, transform 150ms ease, opacity 150ms ease;
+  scroll-snap-align: center;
+  opacity: 0.55;
+  transform: scale(0.96);
 }
 
 .card.active {
   border-color: var(--accent);
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.02);
+  opacity: 1;
 }
 
 .card h3 {

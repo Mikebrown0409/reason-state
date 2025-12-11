@@ -50,11 +50,13 @@ export function LeftPanel(props: Props) {
               {m}
             </button>
           ))}
+        </div>
+        <div style={{ marginTop: 8 }}>
           <button
             className={`chip ${props.vectorEnabled ? "active" : ""}`}
             onClick={() => props.onVectorToggle(!props.vectorEnabled)}
           >
-            Vector
+            Vector toggle {props.vectorEnabled ? "on" : "off"}
           </button>
         </div>
       </div>
