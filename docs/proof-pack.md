@@ -15,8 +15,8 @@ npm run bench:proofpack
 - `kv_latest`: keep only the latest value per key
 - `reason_state`: explicit retract + heal + governed retrieval
 
-### The “holy sh*t” table (what you should see)
-From a typical run, you’ll see something like:
+### Expected results
+From a typical run, you should see something like:
 
 | Runner | Proxy correctness pass rate | Why it fails/wins |
 |---|---:|---|
@@ -30,7 +30,7 @@ Proxy correctness means: the retrieved context **contains the latest truth** and
 - `benchmarks/retraction-proofpack/report.md`
 - `benchmarks/retraction-proofpack/report.json`
 
-### Why devs care
+### Why this matters
 - This benchmark mirrors real production pain: “we changed the requirement, but the agent keeps using the old one.”
 - The goal isn’t “who recalls more trivia,” it’s “who stops lying after updates without prompt bloat.”
 

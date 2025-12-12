@@ -1,8 +1,12 @@
 ## reason-state
 
-Governed long-term memory for agents. Summaries-only context, token-budgeted, replayable. **Drop in one object**, keep governance **explicit** (`retract()`, `heal()`, `rollback()`), and run **keyless** in retrieve-only mode.
+Governed long-term memory for agents. **Token-budgeted context** + **drift control when facts change** (explicit `retract()` + `heal()`), with deterministic replay/audit. Works **keyless** in retrieve-only mode.
 
 **Use it like a note-taking logger:** add facts → retrieve governed context. If you need to update/retract later, give that fact a stable `key` (optional).
+
+## Proof (fast to verify)
+- Update/retraction proof pack (keyless): `docs/proof-pack.md` (`npm run bench:proofpack`)
+- Recall-style evals (key-gated): `docs/benchmarks.md` (LoCoMo/LongMemEval runners)
 
 ## Try it in 60 seconds
 ```bash
@@ -32,7 +36,7 @@ const messages = [{ role: "user", content: goal }];
 // Keyless-safe retrieve-only (no LLM): inject governed context into your messages[]
 const { messages: withMemory, stats } = await injectMemoryContext(rs, messages, { goal });
 // Pass `withMemory` to your model call.
-console.log("ROI stats:", stats);
+console.log("ROI stats:", stats); // { estTokens, contextChars, unknownCount, dirtyCount, blockedCount, ... }
 
 // Plan (default): builds context, calls your model, applies patches (requires a key)
 const { patches } = await rs.plan(goal);
@@ -71,6 +75,7 @@ CLI demo: ingests a few facts, shows balanced retrieval-only context, and if an 
 
 ## Benchmarks
 - Benchmarks + methodology: `docs/benchmarks.md`
+- Retraction/update proof pack (recommended): `docs/proof-pack.md`
 
 ## Docs (short links)
 - Adoption guide: `docs/adoption.md`
