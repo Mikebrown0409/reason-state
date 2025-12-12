@@ -58,5 +58,3 @@ describe("injectMemoryContext", () => {
     expect(out.messages[1].content).toContain("hello");
   });
 });
-
-

@@ -36,4 +36,3 @@ describe("package build artifacts", () => {
     expect(existsSync(cliPath)).toBe(true);
   });
 });
-

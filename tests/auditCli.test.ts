@@ -39,5 +39,3 @@ describe("audit CLI adapters", () => {
     expect(estimateTokensByChars(raw)).toBeGreaterThan(0);
   });
 });
-
-

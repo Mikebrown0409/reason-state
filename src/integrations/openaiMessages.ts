@@ -44,7 +44,7 @@ export async function injectMemoryContext(
   rs: { retrieve: (goal: string) => Promise<{ context: string; stats: InjectResult["stats"] }> },
   messages: ChatMessage[],
   opts: InjectOptions
-) : Promise<InjectResult> {
+): Promise<InjectResult> {
   const { context, stats } = await rs.retrieve(opts.goal);
   const heading = opts.heading ?? "GOVERNED_MEMORY_CONTEXT:";
   const injected = formatInjectedMemory({ heading, context });
@@ -74,5 +74,3 @@ export async function injectMemoryContext(
   out[firstSystemIdx] = { role: "system", content: merged };
   return { messages: out, stats };
 }
-
-

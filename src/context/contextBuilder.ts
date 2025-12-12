@@ -37,7 +37,7 @@ function formatNode(node: StateNode): string {
     node.status === "blocked";
   // Important: we keep retracted/blocked nodes in state (audit/replay),
   // but we should not leak stale summaries into the LLM context.
-  const summary = isRetracted ? "(retracted)" : node.summary ?? "";
+  const summary = isRetracted ? "(retracted)" : (node.summary ?? "");
   return `- ${node.type}:${status} ${node.id}: ${summary}${lineage}`.trim();
 }
 
@@ -283,9 +283,7 @@ function buildBalancedSections(
     .map((s) => s.node);
 
   const vectorMatches =
-    vectorHits && vectorHits.size > 0
-      ? sorted.filter((n) => vectorHits.has(n.id))
-      : [];
+    vectorHits && vectorHits.size > 0 ? sorted.filter((n) => vectorHits.has(n.id)) : [];
 
   const sectionConfigs: SectionConfig[] = [
     vectorMatches.length

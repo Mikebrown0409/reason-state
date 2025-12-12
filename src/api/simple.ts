@@ -62,15 +62,22 @@ export class ReasonStateSimple {
   /**
    * Add a fact/assumption/action/planning node from text or object.
    */
-  async add(textOrObj: string | Record<string, unknown>, opts: AddOptions = {}): Promise<EchoState> {
+  async add(
+    textOrObj: string | Record<string, unknown>,
+    opts: AddOptions = {}
+  ): Promise<EchoState> {
     const id =
       opts.id ??
       (opts.key ? stableIdFromKey(opts.key) : undefined) ??
-      (opts.sourceType && opts.sourceId ? stableIdFromSource(opts.sourceType, opts.sourceId) : undefined) ??
+      (opts.sourceType && opts.sourceId
+        ? stableIdFromSource(opts.sourceType, opts.sourceId)
+        : undefined) ??
       `node-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const summary =
       opts.summary ??
-      (typeof textOrObj === "string" ? textOrObj : (textOrObj as any).summary ?? JSON.stringify(textOrObj));
+      (typeof textOrObj === "string"
+        ? textOrObj
+        : ((textOrObj as any).summary ?? JSON.stringify(textOrObj)));
     const existing = this.engine.snapshot.raw[id];
     const patch: Patch = {
       op: existing ? "replace" : "add",
@@ -98,7 +105,13 @@ export class ReasonStateSimple {
     opts: Omit<AddOptions, "id" | "key"> = {}
   ): Promise<{ id: string; state: EchoState }> {
     const id = stableIdFromKey(key);
-    await this.add(textOrObj, { ...opts, id, key, sourceType: opts.sourceType ?? "key", sourceId: opts.sourceId ?? key });
+    await this.add(textOrObj, {
+      ...opts,
+      id,
+      key,
+      sourceType: opts.sourceType ?? "key",
+      sourceId: opts.sourceId ?? key,
+    });
     return { id, state: this.engine.snapshot };
   }
 
@@ -173,16 +186,12 @@ export class ReasonStateSimple {
       return { patches: [], state: this.engine.snapshot, context: ctx };
     }
 
-    const res = await openaiCompatiblePlanWithContext(
-      this.engine.snapshot,
-      goal,
-      {
-        model: this.opts.model ?? "gpt-4o-mini",
-        apiKey: this.opts.apiKey,
-        baseUrl: this.opts.baseUrl,
-        fetcher: this.opts.fetcher,
-      }
-    );
+    const res = await openaiCompatiblePlanWithContext(this.engine.snapshot, goal, {
+      model: this.opts.model ?? "gpt-4o-mini",
+      apiKey: this.opts.apiKey,
+      baseUrl: this.opts.baseUrl,
+      fetcher: this.opts.fetcher,
+    });
     if (res.patches?.length) {
       this.engine.applyPatches(res.patches);
     }
@@ -202,9 +211,7 @@ export class ReasonStateSimple {
    * Retrieve governed context + lightweight stats (no LLM).
    * This keeps the happy path "context-only" while still letting devs surface ROI metrics easily.
    */
-  async retrieve(
-    goal: string
-  ): Promise<{
+  async retrieve(goal: string): Promise<{
     context: string;
     stats: {
       contextChars: number;
@@ -315,4 +322,3 @@ export class ReasonStateSimple {
     return this.engine.snapshot;
   }
 }
-

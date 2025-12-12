@@ -44,5 +44,3 @@ describe("retraction proof pack (smoke)", () => {
     expect(stableHash(runA)).toBe(stableHash(runB));
   });
 });
-
-

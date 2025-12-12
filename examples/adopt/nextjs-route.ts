@@ -24,5 +24,3 @@ export async function POST(req: Request) {
     headers: { "content-type": "application/json" },
   });
 }
-
-

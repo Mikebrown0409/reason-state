@@ -40,7 +40,9 @@ export function rawDumpFromState(state: EchoState): string {
   return JSON.stringify(state.raw ?? {}, null, 2);
 }
 
-export function parseTrace(input: unknown): { kind: "studioSteps"; steps: StudioStep[] } | { kind: "messages"; messages: Message[] } {
+export function parseTrace(
+  input: unknown
+): { kind: "studioSteps"; steps: StudioStep[] } | { kind: "messages"; messages: Message[] } {
   if (Array.isArray(input)) {
     const first = input[0] as any;
     if (first && typeof first === "object" && "label" in first && "state" in first) {
@@ -117,7 +119,10 @@ export async function messagesToStudioSteps(messages: Message[]): Promise<Studio
   return steps;
 }
 
-export async function computeRoiForGoal(rs: ReasonState, goal: string): Promise<{
+export async function computeRoiForGoal(
+  rs: ReasonState,
+  goal: string
+): Promise<{
   rawChars: number;
   rawTokens: number;
   contextChars: number;
@@ -151,5 +156,3 @@ export async function computeRoiForGoal(rs: ReasonState, goal: string): Promise<
 export function formatRoiLine(roi: Awaited<ReturnType<typeof computeRoiForGoal>>): string {
   return `ROI: context=${roi.contextChars} chars (~${roi.contextTokens} tok) | raw=${roi.rawChars} chars (~${roi.rawTokens} tok) | saved≈${roi.savedPct}% | unknown=${roi.unknown} dirty=${roi.dirty} blocked=${roi.blocked}`;
 }
-
-
