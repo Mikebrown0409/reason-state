@@ -4,6 +4,7 @@ export type StudioStep = {
   label: string;
   state: EchoState;
   patches: Patch[];
+  adapted?: boolean; // true when imported data was synthesized/auto-adapted
 };
 
 const baseState = (): EchoState => ({

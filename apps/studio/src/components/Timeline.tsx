@@ -5,6 +5,8 @@ type Props = {
   steps: StudioStep[];
   active: number;
   onSelect: (idx: number) => void;
+  onRetract?: (idx: number) => void;
+  onRollback?: (idx: number) => void;
 };
 
 export function Timeline(props: Props) {
@@ -57,6 +59,10 @@ export function Timeline(props: Props) {
         const nodes = Object.values(step.state.raw);
         const shown = nodes.slice(0, 3);
         const overflow = nodes.length - shown.length;
+        const unknownCount = (step.state.unknowns ?? []).length + nodes.filter((n: any) => n.type === "unknown").length;
+        const dirtyCount = nodes.filter((n: any) => n.dirty).length;
+        const blockedCount = nodes.filter((n: any) => n.status === "blocked").length;
+        const prev = idx > 0 ? props.steps[idx - 1] : undefined;
         return (
           <div
             key={idx}
@@ -72,7 +78,13 @@ export function Timeline(props: Props) {
             }}
           >
             <h3>{step.label}</h3>
+            {step.adapted ? <div className="badge" style={{ marginBottom: 6 }}>Auto-adapted</div> : null}
             <div className="muted">Patches: {step.patches.length}</div>
+            <div className="chips-row" style={{ marginTop: 6, gap: 6 }}>
+              {unknownCount > 0 && <div className="node-chip blocked">Unknown: {unknownCount}</div>}
+              {dirtyCount > 0 && <div className="node-chip dirty">Dirty: {dirtyCount}</div>}
+              {blockedCount > 0 && <div className="node-chip blocked">Blocked: {blockedCount}</div>}
+            </div>
             <div className="chips-row" style={{ marginTop: 10 }}>
               {shown.map((node) => (
                 <div
@@ -85,6 +97,18 @@ export function Timeline(props: Props) {
                 </div>
               ))}
               {overflow > 0 && <div className="node-chip muted">+{overflow} more</div>}
+            </div>
+            <div className="chips-row" style={{ marginTop: 10, gap: 8 }}>
+              {props.onRetract && (
+                <button className="button ghost" style={{ padding: "6px 10px" }} onClick={(e) => { e.stopPropagation(); props.onRetract?.(idx); }}>
+                  Retract
+                </button>
+              )}
+              {props.onRollback && (
+                <button className="button ghost" style={{ padding: "6px 10px" }} onClick={(e) => { e.stopPropagation(); props.onRollback?.(idx); }}>
+                  Rollback
+                </button>
+              )}
             </div>
           </div>
         );

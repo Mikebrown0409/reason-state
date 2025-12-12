@@ -1,20 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 
 type Props = {
   goal: string;
   onGoalChange: (v: string) => void;
-  mode: "balanced" | "aggressive" | "deterministic";
-  onModeChange: (m: "balanced" | "aggressive" | "deterministic") => void;
   vectorEnabled: boolean;
   onVectorToggle: (v: boolean) => void;
   onRun: () => void;
   onRetrieve: () => void;
   metrics: { tokenSavings: string; contextChars: number; reused: number; regenerated: number };
   governance: string;
+  onLoadSample: () => void;
+  onImportTrace: (json: string) => void;
+  importSummary: string | null;
 };
 
 export function LeftPanel(props: Props) {
-  const modes: Array<Props["mode"]> = ["balanced", "aggressive", "deterministic"];
+  const [traceInput, setTraceInput] = useState("");
+
   return (
     <div className="panel">
       <div className="header">
@@ -25,6 +27,38 @@ export function LeftPanel(props: Props) {
           <div className="badge amber">{props.governance}</div>
         </div>
         <div className="badge">Keyless demo</div>
+      </div>
+
+      <div className="section" style={{ display: "grid", gap: 8 }}>
+        <h4>Quick start</h4>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="button" onClick={props.onLoadSample} style={{ flex: 1 }}>
+            Load sample trace
+          </button>
+          <button
+            className="button ghost"
+            onClick={() => props.onImportTrace(traceInput)}
+            style={{ flex: 1 }}
+          >
+            Import pasted JSON
+          </button>
+        </div>
+        <textarea
+          className="input"
+          rows={3}
+          value={traceInput}
+          onChange={(e) => setTraceInput(e.target.value)}
+          placeholder='Paste an array of steps: [{ "label": "...", "state": {...}, "patches": [...] }]'
+          style={{ resize: "vertical" }}
+        />
+        <div className="muted" style={{ fontSize: 12 }}>
+          Tip: start with a log export from your agent; we render immediately to compare reuse and savings.
+        </div>
+        {props.importSummary && (
+          <div className="muted" style={{ fontSize: 12, color: "#d1f5ff" }}>
+            {props.importSummary}
+          </div>
+        )}
       </div>
 
       <div className="section">
@@ -39,21 +73,10 @@ export function LeftPanel(props: Props) {
       </div>
 
       <div className="section">
-        <h4>Modes</h4>
-        <div className="segmented">
-          {modes.map((m) => (
-            <button
-              key={m}
-              className={props.mode === m ? "active" : ""}
-              onClick={() => props.onModeChange(m)}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
+        <h4>Vector</h4>
         <div className="toggle-row">
           <div className="muted" style={{ fontSize: 12 }}>
-            Vector
+            Semantic boost
           </div>
           <button
             className={`toggle ${props.vectorEnabled ? "on" : ""}`}

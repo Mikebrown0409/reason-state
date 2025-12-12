@@ -162,6 +162,43 @@ html {
   flex-direction: column;
 }
 
+.compare-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin: 4px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.compare-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compare-metrics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.compare-metrics .naive {
+  color: var(--muted);
+}
+
+.compare-metrics .governed {
+  color: #d1f5ff;
+}
+
+.compare-metrics .savings {
+  color: #8ee0a3;
+  font-weight: 600;
+}
+
 .carousel {
   position: relative;
   height: 320px;

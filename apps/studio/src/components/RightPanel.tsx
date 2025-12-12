@@ -1,24 +1,16 @@
 import React, { useMemo, useState } from "react";
 import type { StudioStep } from "../sampleTrace";
-import { buildContext } from "../../../../src/context/contextBuilder.js";
 
 type Props = {
   steps: StudioStep[];
   active: number;
+  contextBody?: string;
 };
 
-export function RightPanel({ steps, active }: Props) {
+export function RightPanel({ steps, active, contextBody }: Props) {
   const [tab, setTab] = useState<"log" | "context" | "diff">("log");
   const step = steps[active];
   const prev = steps[active - 1];
-
-  const context = useMemo(() => {
-    try {
-      return buildContext(step.state, { includeTimeline: true, maxChars: 1200 });
-    } catch (e) {
-      return String(e);
-    }
-  }, [step]);
 
   const diff = useMemo(() => {
     if (!prev) return JSON.stringify(step.state.raw, null, 2);
@@ -51,7 +43,7 @@ export function RightPanel({ steps, active }: Props) {
         </div>
       )}
 
-      {tab === "context" && <pre className="json-box">{context}</pre>}
+      {tab === "context" && <pre className="json-box">{contextBody ?? "No context available"}</pre>}
 
       {tab === "diff" && <pre className="json-box">{diff}</pre>}
     </div>
