@@ -11,6 +11,9 @@ logs
 *.log
 dist/server
 
+# Generated artifacts (local-only)
+*.reason-state.json
+
 # Env/secrets
 .env
 .env.local

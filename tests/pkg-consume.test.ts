@@ -30,5 +30,10 @@ describe("package build artifacts", () => {
     const integ = await import(pathToFileURL(integPath).href);
     expect(typeof integ.injectMemoryContext).toBe("function");
   });
+
+  it("emits the audit CLI entrypoint", () => {
+    const cliPath = path.resolve(distRoot, "cli", "reason-state.js");
+    expect(existsSync(cliPath)).toBe(true);
+  });
 });
 

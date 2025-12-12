@@ -68,6 +68,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "bin": {
+    "reason-state": "./dist/src/cli/reason-state.js"
+  },
   "files": [
     "dist/src/",
     "README.md",
@@ -108,7 +111,8 @@
     "dev:server": "tsx apps/server/src/index.ts",
     "start:server": "node dist/server/index.js",
     "test": "tsx tests/determinism.test.ts",
-    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts tests/openaiMessages.test.ts",
+    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts tests/openaiMessages.test.ts tests/auditCli.test.ts",
+    "audit": "tsx src/cli/reason-state.ts audit",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
     "demo": "tsx apps/demo/demo.ts",

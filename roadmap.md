@@ -27,16 +27,14 @@ Owner: reason-state | Scope: JSON-first governed graph + governed memory layer +
   - Studio becomes the DevTools / conversion funnel.
 
 ### Next milestone — “Adoption Turbo” (v0.5.x)
-- Integrations:
-  - OpenAI-style `messages[]` middleware/helper to inject governed context (copy/paste into any agent).
-  - “Bring your own agent” examples: Node loop + Next.js route + LangGraph/LangChain adapters.
-  - Lightweight import/adapters for common traces/logs (tool calls, message arrays) for instant value.
-- Proof/ROI:
-  - `retrieve()` stats standardized (token estimate, counts) and used in CLI demo + README “5 second win” section.
-  - Add a minimal “audit” CLI (`npx reason-state audit <trace.json>`) that prints ROI and emits a Studio-friendly file.
-- Docs (front door):
-  - README becomes 2 sections: “Drop-in memory layer” first, “Governance/advanced” second.
-  - A single “Adoption guide” doc with copy/paste snippets for common stacks.
+- Shipped (v0.5.1+):
+  - OpenAI-style `messages[]` helper to inject governed context (copy/paste into any agent).
+  - “Bring your own agent” examples: Node loop + Next.js route + LangGraph-style wrapper.
+  - `retrieve()` stats used in CLI demo/README to show a crisp ROI line (chars/tokens saved + governance counts).
+  - Adoption guide doc with copy/paste snippets for common stacks.
+- Remaining (next slice):
+  - “Bring-your-own logs” audit CLI (`npx reason-state audit <trace.json>`) that prints ROI and emits a Studio-friendly file.
+  - Lightweight import/adapters for common traces/logs (tool calls, message arrays) so non-users can paste logs and see value immediately.
 
 ### Mid-term — “Governed agent runtime” (v0.6.x)
 - Replay + governance completeness:

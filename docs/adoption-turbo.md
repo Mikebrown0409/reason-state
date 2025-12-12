@@ -46,6 +46,8 @@ export async function injectMemoryContext(
 - Works with plain OpenAI SDK style loops (no framework).
 - Does not require keys.
 - Does not change existing message content beyond injecting a single additional message or prefix.
+**Status**
+- Shipped: `src/integrations/openaiMessages.ts` + export `reason-state/integrations/openai`
 
 ---
 
@@ -67,6 +69,8 @@ export async function injectMemoryContext(
 
 **Acceptance**
 - A developer can copy/paste any one example and run it with minimal edits.
+**Status**
+- Shipped: `docs/adoption.md`
 
 ---
 
@@ -84,6 +88,8 @@ export async function injectMemoryContext(
   - runs keyless in retrieve-only mode
   - prints memory stats
   - clearly shows “where memory context goes”
+**Status**
+- Shipped: `examples/adopt/*`
 
 ---
 
@@ -98,6 +104,8 @@ export async function injectMemoryContext(
 **Acceptance**
 - CLI demo prints a deterministic, copy-pastable summary line like:
   - `memory: 173 chars (~44 tok), raw: 418 chars (~105 tok), saved ~58% | unknown=0 dirty=1 blocked=1`
+**Status**
+- Shipped: CLI demo prints ROI line + README quickstart prints `stats`
 
 ---
 
@@ -123,6 +131,8 @@ export async function injectMemoryContext(
 - Running `npx reason-state audit trace.json` produces:
   - terminal output with ROI metrics
   - `trace.reason-state.json` (or similar) importable in Studio
+**Status**
+- Not yet (next slice)
 
 ---
 
