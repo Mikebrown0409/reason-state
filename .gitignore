@@ -14,6 +14,10 @@ dist/server
 # Generated artifacts (local-only)
 *.reason-state.json
 
+# Generated benchmark artifacts
+/benchmarks/retraction-proofpack/report.md
+/benchmarks/retraction-proofpack/report.json
+
 # Env/secrets
 .env
 .env.local

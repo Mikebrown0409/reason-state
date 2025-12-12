@@ -111,7 +111,7 @@
     "dev:server": "tsx apps/server/src/index.ts",
     "start:server": "node dist/server/index.js",
     "test": "tsx tests/determinism.test.ts",
-    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts tests/openaiMessages.test.ts tests/auditCli.test.ts",
+    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts tests/openaiMessages.test.ts tests/auditCli.test.ts tests/proofpack.test.ts",
     "audit": "tsx src/cli/reason-state.ts audit",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
@@ -119,6 +119,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
     "lint:types": "tsc --noEmit",
     "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\"",
+    "bench:proofpack": "tsx benchmarks/retraction-proofpack/runner.ts",
     "bench:longmemeval": "tsx benchmarks/longmemeval/runner.ts",
     "bench:longmemeval:smoke": "npm run bench:longmemeval -- --dataset=benchmarks/longmemeval/data/locomo10.json --maxTokens=800 --limit=1 --qaLimit=3 --model=grok-4-1-fast-non-reasoning --baseUrl=https://api.x.ai/v1"
   },
