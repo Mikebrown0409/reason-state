@@ -11,6 +11,13 @@ logs
 *.log
 dist/server
 
+# Generated artifacts (local-only)
+*.reason-state.json
+
+# Generated benchmark artifacts
+/benchmarks/retraction-proofpack/report.md
+/benchmarks/retraction-proofpack/report.json
+
 # Env/secrets
 .env
 .env.local
@@ -33,3 +40,6 @@ locomo10.json
 /benchmarks/longmemeval/data/locomo10.json
 /benchmarks/longmemeval/data/locomo50.json
 /benchmarks/memory-wars/results.json
+
+
+/docs/uidesignconcept.md 

@@ -1,6 +1,6 @@
 {
   "name": "reason-state",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "private": false,
   "license": "MIT",
@@ -15,6 +15,10 @@
     ".": {
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
+    },
+    "./integrations/openai": {
+      "import": "./dist/src/integrations/openaiMessages.js",
+      "types": "./dist/src/integrations/openaiMessages.d.ts"
     },
     "./agent/planAndAct": {
       "import": "./dist/src/agent/planAndAct.js",
@@ -64,6 +68,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "bin": {
+    "reason-state": "./dist/src/cli/reason-state.js"
+  },
   "files": [
     "dist/src/",
     "README.md",
@@ -93,22 +100,26 @@
     "reasoning-engine"
   ],
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run dev:studio",
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "build:server": "tsc -p tsconfig.server.json",
     "build:all": "npm run build && npm run build:server",
     "build:ui": "vite build",
+    "dev:studio": "vite --config apps/studio/vite.config.ts",
+    "build:studio": "vite build --config apps/studio/vite.config.ts",
     "prepublishOnly": "npm run build",
     "dev:server": "tsx apps/server/src/index.ts",
     "start:server": "node dist/server/index.js",
     "test": "tsx tests/determinism.test.ts",
-    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts",
+    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts tests/openaiMessages.test.ts tests/auditCli.test.ts tests/proofpack.test.ts",
+    "audit": "tsx src/cli/reason-state.ts audit",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
     "demo": "tsx apps/demo/demo.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"examples/**/*.{ts,tsx}\"",
     "lint:types": "tsc --noEmit",
     "format": "prettier --write \"{src,tests,examples}/**/*.{ts,tsx,md,json}\"",
+    "bench:proofpack": "tsx benchmarks/retraction-proofpack/runner.ts",
     "bench:longmemeval": "tsx benchmarks/longmemeval/runner.ts",
     "bench:longmemeval:smoke": "npm run bench:longmemeval -- --dataset=benchmarks/longmemeval/data/locomo10.json --maxTokens=800 --limit=1 --qaLimit=3 --model=grok-4-1-fast-non-reasoning --baseUrl=https://api.x.ai/v1"
   },
@@ -124,6 +135,7 @@
     "@types/react": "^18.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "@vitejs/plugin-react": "^5.1.2",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.29.1",

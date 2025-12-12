@@ -1,0 +1,6 @@
+[
+  { "role": "system", "content": "You are a helpful assistant." },
+  { "role": "user", "content": "Plan a team retro schedule." },
+  { "role": "assistant", "content": "Got it. Any constraints?" },
+  { "role": "user", "content": "No Fridays. Weekly Mondays 10am PT." }
+]

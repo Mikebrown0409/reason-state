@@ -46,4 +46,3 @@ describe("buildContext with vectorStore", () => {
     expect(ctx).toContain("goal");
   });
 });
-

@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { DemoApp } from "../demo/DemoApp.js";
+import { DemoApp } from "../apps/demo/demo/DemoApp.js";
 
 const root = document.getElementById("root");
 

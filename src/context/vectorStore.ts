@@ -59,4 +59,3 @@ export class InMemoryVectorStore implements VectorStore {
     return dot / Math.sqrt(normA * normB);
   }
 }
-

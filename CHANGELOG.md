@@ -7,6 +7,17 @@
 - HTTP service + Docker: minimal server with `/add`, `/update`, `/query`, `/health`; Docker assets under `apps/server/docker`; compose example.
 - Repo hygiene: live tests moved to `tests/live`; README repo layout; broader .gitignore for caches/logs; runtime apps grouped under `apps/`.
 
+## 0.5.1 (released)
+- Adoption Turbo: drop-in memory layer ergonomics (`retrieveContext`, `retrieve` with stats, `plan`, `retract` accepts key or id).
+- Integrations: OpenAI-style `messages[]` helper `injectMemoryContext` exported under `reason-state/integrations/openai`.
+- Docs/examples: new adoption guide (`docs/adoption.md`), concrete execution checklist (`docs/adoption-turbo.md`), runnable examples under `examples/adopt/`.
+- Demo: CLI demo now shows the integration-style flow and prints a crisp ROI line (chars/tokens saved + governance counts).
+- Tests: added unit coverage for message injection and extended package consumer test to include the new integration output.
+- Audit CLI: `reason-state audit <trace.json>` prints ROI lines and emits a Studio-importable `*.reason-state.json` artifact (npx-friendly via `bin`).
+- Proof pack: keyless retraction/update benchmark (`npm run bench:proofpack`) + CI-friendly test (`tests/proofpack.test.ts`) and docs (`docs/proof-pack.md`).
+- Context safety: retracted/blocked nodes no longer leak stale summaries into LLM context (sanitized in `buildContext` output).
+- README/docs: front-door README trimmed for adoption and linked docs pages added (audit CLI, benchmarks, HTTP service, keys/tests, hybrid retrieval).
+
 ## 0.4.0
 - Added append-only log + checkpoints, deterministic context builder modes, governance rules (summaries-only LLM writes), reconciliation improvements.
 - Added tooling adapters (Grok/OpenAI-compatible planners), remote storage driver, and examples/smokes for agents.

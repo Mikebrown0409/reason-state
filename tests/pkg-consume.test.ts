@@ -24,5 +24,15 @@ describe("package build artifacts", () => {
     const engine = await import(pathToFileURL(enginePath).href);
     expect(engine.ReasonState).toBeDefined();
   });
-});
 
+  it("imports the OpenAI messages integration subpath", async () => {
+    const integPath = path.resolve(distRoot, "integrations", "openaiMessages.js");
+    const integ = await import(pathToFileURL(integPath).href);
+    expect(typeof integ.injectMemoryContext).toBe("function");
+  });
+
+  it("emits the audit CLI entrypoint", () => {
+    const cliPath = path.resolve(distRoot, "cli", "reason-state.js");
+    expect(existsSync(cliPath)).toBe(true);
+  });
+});

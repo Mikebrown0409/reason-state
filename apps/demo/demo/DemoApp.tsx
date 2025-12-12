@@ -1,13 +1,13 @@
 import React, { useState } from "react";
-import { Timeline } from "../src/ui/Timeline.js";
-import { AssumptionCard } from "../src/ui/AssumptionCard.js";
-import { ReasonState } from "../src/engine/ReasonState.js";
-import type { EchoState, Patch } from "../src/engine/types.js";
-import { runSimpleAgent as runSimple } from "../examples/agents/simpleAgent.js";
-import { runDagAgent } from "../examples/agents/dagAgent.js";
-import { runSimpleAgent as runDemoAgent } from "../examples/agents/simpleAgent.js";
-import { resetCalendarHolds } from "../src/tools/mockBooking.js";
-import { mockBooking } from "../src/tools/mockBooking.js";
+import { Timeline } from "../../../src/ui/Timeline.js";
+import { AssumptionCard } from "../../../src/ui/AssumptionCard.js";
+import { ReasonState } from "../../../src/engine/ReasonState.js";
+import type { EchoState, Patch } from "../../../src/engine/types.js";
+import { runSimpleAgent as runSimple } from "../../../examples/agents/simpleAgent.js";
+import { runDagAgent } from "../../../examples/agents/dagAgent.js";
+import { runSimpleAgent as runDemoAgent } from "../../../examples/agents/simpleAgent.js";
+import { resetCalendarHolds } from "../../../src/tools/mockBooking.js";
+import { mockBooking } from "../../../src/tools/mockBooking.js";
 
 type HistoryEntry = { state: EchoState; label: string; idx: number };
 

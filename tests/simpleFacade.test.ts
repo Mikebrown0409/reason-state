@@ -69,4 +69,3 @@ describe("ReasonStateSimple", () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 });
-
