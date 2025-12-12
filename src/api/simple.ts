@@ -3,6 +3,9 @@ import { buildContext } from "../context/contextBuilder.js";
 import { openaiCompatiblePlanWithContext } from "../tools/openaiCompatiblePlanner.js";
 import type { EchoState, Patch } from "../engine/types.js";
 import { buildRollbackPatches } from "../engine/reconciliation.js";
+import { detectContradictions } from "../engine/reconciliation.js";
+
+type ReasonMode = "debug" | "production";
 
 type SimpleOptions = {
   model?: string;
@@ -12,6 +15,12 @@ type SimpleOptions = {
   fetcher?: typeof fetch;
   vectorStore?: any;
   vectorTopK?: number;
+  /**
+   * Runtime mode:
+   * - debug (default): explicit heal/retract/rollback only
+   * - production: auto-heal contradictions (retract lowest-confidence, retry), rollback on failure
+   */
+  mode?: ReasonMode;
 };
 
 type AddOptions = {
@@ -40,6 +49,7 @@ type UpdateOptions = {
 };
 
 type QueryMode = "plan" | "retrieve";
+type QueryOptions = { mode?: QueryMode; runtimeMode?: ReasonMode };
 
 function stableIdFromKey(key: string): string {
   // Important: id is used inside JSON pointer paths like `/raw/${id}` so it must not contain `/`.
@@ -53,10 +63,12 @@ function stableIdFromSource(sourceType: string, sourceId: string): string {
 export class ReasonStateSimple {
   private engine: ReasonState;
   private opts: SimpleOptions;
+  private readonly defaultRuntimeMode: ReasonMode;
 
   constructor(opts: SimpleOptions = {}) {
     this.engine = new ReasonState();
     this.opts = opts;
+    this.defaultRuntimeMode = opts.mode ?? "debug";
   }
 
   /**
@@ -171,8 +183,18 @@ export class ReasonStateSimple {
    */
   async query(
     goal: string,
-    opts: { mode?: QueryMode } = {}
-  ): Promise<{ patches: Patch[]; state: EchoState; context?: string }> {
+    opts: QueryOptions = {}
+  ): Promise<{
+    patches: Patch[];
+    state: EchoState;
+    context?: string;
+    stats?: {
+      autoHealAttempts?: number;
+      autoHealRolledBack?: boolean;
+      contradictions?: number;
+    };
+  }> {
+    const runtimeMode: ReasonMode = opts.runtimeMode ?? this.defaultRuntimeMode;
     const maxChars = (this.opts.maxTokens ?? 1000) * 4;
     const ctx = buildContext(this.engine.snapshot, {
       mode: "balanced",
@@ -186,6 +208,7 @@ export class ReasonStateSimple {
       return { patches: [], state: this.engine.snapshot, context: ctx };
     }
 
+    const baselineState = JSON.parse(JSON.stringify(this.engine.snapshot)) as EchoState;
     const res = await openaiCompatiblePlanWithContext(this.engine.snapshot, goal, {
       model: this.opts.model ?? "gpt-4o-mini",
       apiKey: this.opts.apiKey,
@@ -195,6 +218,16 @@ export class ReasonStateSimple {
     if (res.patches?.length) {
       this.engine.applyPatches(res.patches);
     }
+
+    if (runtimeMode === "production") {
+      const healed = await this.autoHealAndRetry(goal, {
+        context: ctx,
+        patches: res.patches ?? [],
+        baselineState,
+      });
+      return healed;
+    }
+
     return { patches: res.patches, state: this.engine.snapshot, context: ctx };
   }
 
@@ -320,5 +353,99 @@ export class ReasonStateSimple {
       await this.engine.selfHealAndReplay(opts.fromCheckpoint);
     }
     return this.engine.snapshot;
+  }
+
+  private async autoHealAndRetry(
+    goal: string,
+    input: { context?: string; patches: Patch[]; baselineState: EchoState }
+  ): Promise<{
+    patches: Patch[];
+    state: EchoState;
+    context?: string;
+    stats: { autoHealAttempts: number; autoHealRolledBack: boolean; contradictions: number };
+  }> {
+    // Collect contradictions ignoring nodes already retracted/blocked.
+    const contradictions = this.filteredContradictions(this.engine.snapshot);
+    if (contradictions.length === 0) {
+      return {
+        patches: input.patches,
+        state: this.engine.snapshot,
+        context: input.context,
+        stats: { autoHealAttempts: 0, autoHealRolledBack: false, contradictions: 0 },
+      };
+    }
+
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts && this.filteredContradictions(this.engine.snapshot).length > 0) {
+      attempts += 1;
+      const target = this.pickLowestConfidenceNode(this.engine.snapshot);
+      if (target) {
+        await this.retract(target.id, { reason: "auto-heal" });
+      }
+      const rerun = await openaiCompatiblePlanWithContext(this.engine.snapshot, goal, {
+        model: this.opts.model ?? "gpt-4o-mini",
+        apiKey: this.opts.apiKey,
+        baseUrl: this.opts.baseUrl,
+        fetcher: this.opts.fetcher,
+      });
+      if (rerun.patches?.length) {
+        this.engine.applyPatches(rerun.patches);
+      }
+      if (this.filteredContradictions(this.engine.snapshot).length === 0) {
+        return {
+          patches: [...input.patches, ...(rerun.patches ?? [])],
+          state: this.engine.snapshot,
+          context: input.context,
+          stats: {
+            autoHealAttempts: attempts,
+            autoHealRolledBack: false,
+            contradictions: 0,
+          },
+        };
+      }
+    }
+
+    // Rollback fallback
+    (this.engine as any).state = JSON.parse(JSON.stringify(input.baselineState));
+    return {
+      patches: input.patches,
+      state: this.engine.snapshot,
+      context: input.context,
+      stats: {
+        autoHealAttempts: attempts,
+        autoHealRolledBack: true,
+        contradictions: this.filteredContradictions(this.engine.snapshot).length,
+      },
+    };
+  }
+
+  private filteredContradictions(state: EchoState): string[] {
+    const ids = detectContradictions(state);
+    return ids.filter((id) => {
+      const n: any = state.raw?.[id];
+      if (!n) return false;
+      if (n.assumptionStatus === "retracted") return false;
+      if (n.status === "blocked") return false;
+      return true;
+    });
+  }
+
+  private pickLowestConfidenceNode(state: EchoState): { id: string; confidence: number } | null {
+    const ids = this.filteredContradictions(state);
+    if (ids.length === 0) return null;
+    const sorted = ids
+      .map((id) => {
+        const n: any = state.raw?.[id] ?? {};
+        const confidence = typeof n.confidence === "number" ? n.confidence : 0;
+        return { id, confidence, updatedAt: n.updatedAt ?? "" };
+      })
+      .sort((a, b) => {
+        if (a.confidence === b.confidence) {
+          return String(a.updatedAt).localeCompare(String(b.updatedAt));
+        }
+        return a.confidence - b.confidence;
+      });
+    return sorted[0] ?? null;
   }
 }

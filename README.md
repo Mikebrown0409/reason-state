@@ -22,6 +22,7 @@ const rs = new ReasonState({
   apiKey: process.env.OPENAI_API_KEY, // optional
   model: "gpt-4o-mini",               // optional
   maxTokens: 2500,                    // ~10k chars budget
+  mode: "debug",                      // or "production" for auto-heal + rollback on contradictions
 });
 
 // Zero-friction: just add text (we generate an id)
@@ -45,6 +46,7 @@ const { patches } = await rs.plan(goal);
 await rs.retract("user:pref:no_friday_meetings"); // retract by stable key (blocked + dirty)
 await rs.heal();                           // resolves contradictions + reconciles
 await rs.rollback("subtree-root-node-id"); // subtree rollback (optional)
+// Production mode: set `mode: "production"` to auto-heal contradictions with rollback fallback.
 ```
 
 ### Try it with your own logs (no code)

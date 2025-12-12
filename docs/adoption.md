@@ -3,7 +3,7 @@
 ### Mental model
 - Use it like a note logger: **add memories** as your agent runs.
 - Before each model call: **retrieve governed context** and inject it into your existing `messages[]`.
-- If a fact changes: **`retract()` + `heal()`** (explicit; no hidden recompute).
+- If a fact changes: **`retract()` + `heal()`** (explicit; no hidden recompute). In production you can opt into `mode: "production"` to auto-heal contradictions with rollback fallback.
 
 ### 1) Install
 ```bash
@@ -15,7 +15,7 @@ npm install reason-state
 import { ReasonState } from "reason-state";
 import { injectMemoryContext } from "reason-state/integrations/openai";
 
-const rs = new ReasonState({ maxTokens: 2500 });
+const rs = new ReasonState({ maxTokens: 2500, mode: "debug" }); // set mode: "production" to auto-heal contradictions
 
 // Write memory (keys optional; recommended when you may retract/update later)
 await rs.add("User hates meetings on Friday", { key: "pref:no_friday_meetings" });

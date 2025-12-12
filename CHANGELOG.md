@@ -18,6 +18,12 @@
 - Context safety: retracted/blocked nodes no longer leak stale summaries into LLM context (sanitized in `buildContext` output).
 - README/docs: front-door README trimmed for adoption and linked docs pages added (audit CLI, benchmarks, HTTP service, keys/tests, hybrid retrieval).
 
+## 0.5.5 (unreleased)
+- Production-ready mode: `mode: "production"` auto-heals contradictions (retract lowest-confidence, retry plan) with rollback fallback; default `mode: "debug"` remains explicit.
+- Stats: surface `autoHealAttempts` / `autoHealRolledBack` in plan results for CLI/demo/audit visibility.
+- Tests: added deterministic auto-heal coverage (`tests/autoHealMode.test.ts`).
+- README: documented the `mode` option and production behavior in the quickstart snippet.
+
 ## 0.4.0
 - Added append-only log + checkpoints, deterministic context builder modes, governance rules (summaries-only LLM writes), reconciliation improvements.
 - Added tooling adapters (Grok/OpenAI-compatible planners), remote storage driver, and examples/smokes for agents.
