@@ -16,6 +16,10 @@
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
     },
+    "./integrations/openai": {
+      "import": "./dist/src/integrations/openaiMessages.js",
+      "types": "./dist/src/integrations/openaiMessages.d.ts"
+    },
     "./agent/planAndAct": {
       "import": "./dist/src/agent/planAndAct.js",
       "types": "./dist/src/agent/planAndAct.d.ts"
@@ -104,7 +108,7 @@
     "dev:server": "tsx apps/server/src/index.ts",
     "start:server": "node dist/server/index.js",
     "test": "tsx tests/determinism.test.ts",
-    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts",
+    "test:pkg": "npm run build && vitest run tests/pkg-consume.test.ts tests/openaiMessages.test.ts",
     "test:agent": "tsx tests/agent.smoke.ts",
     "test:agent:simple": "tsx tests/simpleAgent.smoke.ts",
     "demo": "tsx apps/demo/demo.ts",

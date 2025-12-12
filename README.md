@@ -1,29 +1,44 @@
-# reason-state
+## reason-state
 
-Governed long-term memory for agents. Summaries-only context, token-budgeted, replayable. Default API is 3 calls: add, query, update. Works with any OpenAI-compatible endpoint (OpenAI, Groq, Anthropic via base/model).
+Governed long-term memory for agents. Summaries-only context, token-budgeted, replayable. **Drop in one object**, keep governance **explicit** (`retract()`, `heal()`, `rollback()`), and run **keyless** in retrieve-only mode.
+
+**Use it like a note-taking logger:** add facts → retrieve governed context. If you need to update/retract later, give that fact a stable `key` (optional).
 
 ## Quick start (30s)
 ```bash
 npm install reason-state
 ```
 ```ts
-import ReasonState from "reason-state";
+import { ReasonState } from "reason-state";
+import { injectMemoryContext } from "reason-state/integrations/openai";
 
 const rs = new ReasonState({
-  apiKey: process.env.OPENAI_API_KEY,   // OpenAI/Groq-compatible
-  model: "gpt-4o-mini",
-  maxTokens: 2500,                      // ~10k chars budget
+  apiKey: process.env.OPENAI_API_KEY, // optional
+  model: "gpt-4o-mini",               // optional
+  maxTokens: 2500,                    // ~10k chars budget
 });
 
+// Zero-friction: just add text (we generate an id)
 await rs.add("User hates meetings on Friday");
 
-// Retrieve-only (no LLM): pruned, budgeted context
-const { context } = await rs.query("When should we schedule the retro?", { mode: "retrieve" });
+// Recommended for anything you may update/retract later: provide a stable key.
+await rs.add("User hates meetings on Friday", { key: "user:pref:no_friday_meetings", type: "fact" });
 
-// Plan (default): builds context, calls your model, applies patches
-const { patches } = await rs.query("When should we schedule the retro?");
+const goal = "When should we schedule the retro?";
+const messages = [{ role: "user", content: goal }];
 
-await rs.update("node-id-123", { retracted: true, reason: "New policy" });
+// Keyless-safe retrieve-only (no LLM): inject governed context into your messages[]
+const { messages: withMemory, stats } = await injectMemoryContext(rs, messages, { goal });
+// Pass `withMemory` to your model call.
+console.log("ROI stats:", stats);
+
+// Plan (default): builds context, calls your model, applies patches (requires a key)
+const { patches } = await rs.plan(goal);
+
+// Explicit governance (no hidden recompute)
+await rs.retract("user:pref:no_friday_meetings"); // retract by stable key (blocked + dirty)
+await rs.heal();                           // resolves contradictions + reconciles
+await rs.rollback("subtree-root-node-id"); // subtree rollback (optional)
 ```
 
 ## Demo (1 command)
@@ -39,7 +54,9 @@ CLI demo: ingests a few facts, shows balanced retrieval-only context, and if an 
 - Provider-agnostic: OpenAI-compatible by default; swap base/model/apiKey.
 
 ## API guarantees (0.2.x)
-- Stable surface: default export `ReasonState` (simple API), `ReasonStateAdvanced`, `planAndAct`, `buildContext`, `facade` helpers, storage drivers, and tool adapters under `reason-state/tools/*`.
+- Stable surface:
+  - Root: `ReasonState` (simple), `ReasonStateAdvanced`
+  - Subpaths: `reason-state/agent/planAndAct`, `reason-state/context`, `reason-state/api`, `reason-state/tools/*`
 - Invariants: append-only patch DSL (validated, no deletes), LLM may only write summaries (never `/raw`), lineage preserved, deterministic context builder (summaries-only, token-budgeted), log+checkpoint replay.
 - Breaking changes are announced in `CHANGELOG.md`; new fields are additive where possible.
 
@@ -67,8 +84,8 @@ CLI demo: ingests a few facts, shows balanced retrieval-only context, and if an 
 ## Run as a service (HTTP)
 - Start locally (keyless retrieve-only): `npm run dev:server` (port 3000).
 - Build+run: `npm run build:all && npm run start:server`.
-- Docker (from `server/docker/`): `docker build -t reason-state -f server/docker/Dockerfile . && docker run -p 3000:3000 reason-state`.
-- Compose: `docker-compose -f server/docker/docker-compose.yaml up --build`.
+- Docker (from `apps/server/docker/`): `docker build -t reason-state -f apps/server/docker/Dockerfile . && docker run -p 3000:3000 reason-state`.
+- Compose: `docker-compose -f apps/server/docker/docker-compose.yaml up --build`.
 
 Endpoints (JSON):
 - `GET /health` → `{ status: "ok" }`
@@ -90,11 +107,16 @@ Planner usage: set `OPENAI_API_KEY` (or GROK) and optional `OPENAI_MODEL`/`BASE_
 - Pass a `vectorStore` into `ReasonStateSimple` to bias context with vector hits; defaults remain rule-based.
 - Example:
 ```ts
-import ReasonState, { InMemoryVectorStore } from "reason-state";
+import { ReasonState, InMemoryVectorStore } from "reason-state";
 const vs = new InMemoryVectorStore();
 vs.upsert([{ id: "fact1", text: "Beach resort has good weather" }]);
 const rs = new ReasonState({ vectorStore: vs, vectorTopK: 5 });
-await rs.add("Beach resort has good weather", { id: "fact1" });
+await rs.add("Beach resort has good weather", {
+  key: "fact:weather:beach_resort",
+  type: "fact",
+  sourceType: "vector",
+  sourceId: "fact1",
+});
 const res = await rs.query("Where to host the offsite?");
 ```
 
@@ -126,6 +148,7 @@ Token reduction ~8×; F1 lift ~5.4×. (Small slice due to 12k TPM key; full run 
 - Context builder docs: `docs/context-builder.md`
 - System prompt: `docs/system-prompt.md`
 - Remote storage driver: `src/engine/storageRemote.ts`
+- Adoption guide: `docs/adoption.md`
 
 ## Env
 - `OPENAI_API_KEY` (or compatible)
