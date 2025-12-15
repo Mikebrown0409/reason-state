@@ -60,6 +60,37 @@ function stableIdFromSource(sourceType: string, sourceId: string): string {
   return `src-${encodeURIComponent(sourceType)}-${encodeURIComponent(sourceId)}`;
 }
 
+/**
+ * Find a goal node ID by matching goal text against planning nodes.
+ * Returns the best matching planning node id, or undefined if no match.
+ */
+function findGoalNodeId(state: EchoState, goal: string): string | undefined {
+  if (!goal || !state.raw) return undefined;
+
+  const goalLower = goal.toLowerCase();
+  const planningNodes = Object.values(state.raw).filter((n) => n.type === "planning");
+
+  // Exact summary match first
+  for (const n of planningNodes) {
+    if (n.summary?.toLowerCase() === goalLower) return n.id;
+  }
+
+  // Partial match (goal appears in summary or vice versa)
+  for (const n of planningNodes) {
+    const summary = n.summary?.toLowerCase() ?? "";
+    if (summary.includes(goalLower) || goalLower.includes(summary)) {
+      return n.id;
+    }
+  }
+
+  // If no planning nodes match, check if goal matches any node summary
+  for (const n of Object.values(state.raw)) {
+    if (n.summary?.toLowerCase() === goalLower) return n.id;
+  }
+
+  return undefined;
+}
+
 export class ReasonStateSimple {
   private engine: ReasonState;
   private opts: SimpleOptions;
@@ -196,9 +227,11 @@ export class ReasonStateSimple {
   }> {
     const runtimeMode: ReasonMode = opts.runtimeMode ?? this.defaultRuntimeMode;
     const maxChars = (this.opts.maxTokens ?? 1000) * 4;
+    const goalId = findGoalNodeId(this.engine.snapshot, goal);
     const ctx = buildContext(this.engine.snapshot, {
       mode: "balanced",
       maxChars,
+      goalId,
       vectorStore: this.opts.vectorStore,
       vectorTopK: this.opts.vectorTopK,
       queryText: goal,
@@ -285,6 +318,17 @@ export class ReasonStateSimple {
   }
 
   get state(): EchoState {
+    return this.engine.snapshot;
+  }
+
+  /**
+   * Apply patches directly to the engine.
+   * Used by ReasonStateAuto for structuring patches.
+   */
+  applyPatches(patches: Patch[]): EchoState {
+    if (patches.length > 0) {
+      this.engine.applyPatches(patches);
+    }
     return this.engine.snapshot;
   }
 

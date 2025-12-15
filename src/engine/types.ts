@@ -1,6 +1,6 @@
 export type NodeType = "fact" | "unknown" | "assumption" | "action" | "planning";
 
-export type NodeStatus = "open" | "blocked" | "resolved" | "dirty";
+export type NodeStatus = "open" | "blocked" | "resolved" | "dirty" | "archived";
 
 export type AssumptionStatus = "valid" | "retracted" | "superseded" | "unknown" | "resolved";
 

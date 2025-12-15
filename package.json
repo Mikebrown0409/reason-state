@@ -63,6 +63,10 @@
     "./tools/openaiCompatiblePlanner": {
       "import": "./dist/src/tools/openaiCompatiblePlanner.js",
       "types": "./dist/src/tools/openaiCompatiblePlanner.d.ts"
+    },
+    "./auto": {
+      "import": "./dist/src/api/auto.js",
+      "types": "./dist/src/api/auto.d.ts"
     }
   },
   "publishConfig": {

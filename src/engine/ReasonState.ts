@@ -6,7 +6,7 @@ const ALLOWED_NODE_TYPES = new Set([
   "planning",
   "decision",
 ]);
-const ALLOWED_STATUS = new Set(["open", "blocked", "resolved", "dirty"]);
+const ALLOWED_STATUS = new Set(["open", "blocked", "resolved", "dirty", "archived"]);
 const ALLOWED_ASSUMPTION_STATUS = new Set(["valid", "invalid", "retracted", "expired", "resolved"]);
 
 function validateNodeShape(bucket: "raw" | "summary", id: string, value: unknown): void {

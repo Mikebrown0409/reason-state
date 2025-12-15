@@ -1,8 +1,15 @@
 import { buildContext } from "../context/contextBuilder.js";
-import type { EchoState, Patch } from "../engine/types.js";
+import type { EchoState, Patch, NodeType } from "../engine/types.js";
 import { SYSTEM_PROMPT, validateModelPatches } from "./grokChat.js";
 
 export type OpenAICompatiblePlanResult = {
+  patches: Patch[];
+  attempts: number;
+  lastError?: string;
+  raw?: string;
+};
+
+export type StructureNodesResult = {
   patches: Patch[];
   attempts: number;
   lastError?: string;
@@ -113,4 +120,283 @@ export async function openaiCompatiblePlanWithContext(
     }
   }
   throw new Error("openaiCompatiblePlanWithContext unreachable");
+}
+
+/**
+ * System prompt for structuring unstructured nodes.
+ * Unlike reconciliation (summary-only), structuring can modify node types and edges.
+ */
+const STRUCTURE_SYSTEM_PROMPT = [
+  "You are Reason-State structuring. Given new unstructured nodes, classify and connect them to existing memory.",
+  "",
+  "Rules (must follow exactly):",
+  "- For each unstructured node listed, emit patches to classify and connect it.",
+  "- Allowed patches:",
+  "  1. Set type: {\"op\":\"replace\",\"path\":\"/raw/{id}/type\",\"value\":\"fact|assumption|unknown|planning\"}",
+  "  2. Add contradicts edge: {\"op\":\"replace\",\"path\":\"/raw/{id}/contradicts\",\"value\":[\"other-id\"]}",
+  "  3. Add dependsOn edge: {\"op\":\"replace\",\"path\":\"/raw/{id}/dependsOn\",\"value\":[\"other-id\"]}",
+  "  4. Add temporal edge: {\"op\":\"replace\",\"path\":\"/raw/{id}/temporalAfter\",\"value\":[\"other-id\"]}",
+  "  5. Update summary: {\"op\":\"replace\",\"path\":\"/summary/{id}\",\"value\":\"concise summary\"}",
+  "  6. Archive node: {\"op\":\"replace\",\"path\":\"/raw/{id}/status\",\"value\":\"archived\"}",
+  "  7. Reactivate node: {\"op\":\"replace\",\"path\":\"/raw/{id}/status\",\"value\":\"open\"}",
+  "- Type classification guidelines:",
+  "  - fact: verified information from tools or user statements",
+  "  - assumption: inferred or uncertain information that may change",
+  "  - unknown: missing information needed to proceed",
+  "  - planning: goals, tasks, or action items",
+  "- Detect contradictions: if a new node contradicts an existing node, add both to each other's contradicts array.",
+  "- Archival and reactivation (IMPORTANT):",
+  "  - If a new node supersedes or contradicts an existing active node, ARCHIVE the old node.",
+  "  - Example: 'User wants Tokyo' superseded by 'User wants Amsterdam' → archive the Tokyo node.",
+  "  - To archive: {\"op\":\"replace\",\"path\":\"/raw/{old-id}/status\",\"value\":\"archived\"}",
+  "  - If a new node matches content of an archived node (user reverted context),",
+  "    REACTIVATE the archived node and ARCHIVE the currently active conflicting node.",
+  "  - To reactivate: {\"op\":\"replace\",\"path\":\"/raw/{archived-id}/status\",\"value\":\"open\"}",
+  "  - Archived nodes are NOT deleted; they remain for audit and can be reactivated.",
+  "- Use existing node ids; do NOT invent new ids.",
+  "- Output a JSON array of patches. If unsure or no changes needed, return [].",
+  "",
+  "Example output:",
+  '[{"op":"replace","path":"/raw/auto-abc123/type","value":"assumption"},{"op":"replace","path":"/raw/auto-abc123/status","value":"archived"}]',
+].join("\n");
+
+/**
+ * Parsed field-level update from LLM.
+ */
+type FieldUpdate = {
+  nodeId: string;
+  field: string;
+  value: unknown;
+};
+
+/**
+ * Validate and parse structuring patches from LLM output.
+ * Converts field-level patches into validated FieldUpdates.
+ * Summary patches are returned directly.
+ */
+function validateStructuringPatches(
+  content: string,
+  allowedNodeIds: Set<string>,
+  allKnownIds: Set<string>
+): { fieldUpdates: FieldUpdate[]; summaryPatches: Patch[] } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (err) {
+    throw new Error(`structuring output is not valid JSON: ${String(err)}`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("structuring output must be a JSON array of patches");
+  }
+
+  const ALLOWED_OPS = new Set(["add", "replace"]);
+  const ALLOWED_NODE_FIELDS = new Set(["type", "contradicts", "dependsOn", "temporalAfter", "temporalBefore", "status"]);
+  const VALID_TYPES: Set<NodeType> = new Set(["fact", "assumption", "unknown", "planning", "action"]);
+  const VALID_STATUSES = new Set(["open", "blocked", "resolved", "dirty", "archived"]);
+
+  const fieldUpdates: FieldUpdate[] = [];
+  const summaryPatches: Patch[] = [];
+
+  for (const p of parsed) {
+    if (!p || typeof p !== "object") throw new Error("patch must be an object");
+    const { op, path, value } = p as Patch;
+    if (!ALLOWED_OPS.has(op as string)) {
+      throw new Error(`invalid op: ${String(op)}`);
+    }
+    if (typeof path !== "string") throw new Error("path must be string");
+
+    // Parse path: /raw/{id}/{field} or /summary/{id}
+    const rawFieldMatch = path.match(/^\/raw\/([^/]+)\/([^/]+)$/);
+    const rawMatch = path.match(/^\/raw\/([^/]+)$/);
+    const summaryMatch = path.match(/^\/summary\/([^/]+)$/);
+
+    if (rawFieldMatch) {
+      // /raw/{id}/{field} - updating a specific field
+      const [, id, field] = rawFieldMatch;
+      if (!allowedNodeIds.has(id) && !allKnownIds.has(id)) {
+        throw new Error(`cannot update unknown node: ${id}`);
+      }
+      if (!ALLOWED_NODE_FIELDS.has(field)) {
+        throw new Error(`cannot update field: ${field}. Allowed: ${[...ALLOWED_NODE_FIELDS].join(", ")}`);
+      }
+      // Validate value based on field
+      if (field === "type") {
+        if (!VALID_TYPES.has(value as NodeType)) {
+          throw new Error(`invalid type value: ${String(value)}`);
+        }
+      } else if (field === "status") {
+        if (!VALID_STATUSES.has(value as string)) {
+          throw new Error(`invalid status value: ${String(value)}. Allowed: ${[...VALID_STATUSES].join(", ")}`);
+        }
+      } else if (["contradicts", "dependsOn", "temporalAfter", "temporalBefore"].includes(field)) {
+        if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
+          throw new Error(`${field} must be an array of strings`);
+        }
+        // Validate that referenced ids exist
+        for (const refId of value as string[]) {
+          if (!allKnownIds.has(refId) && !allowedNodeIds.has(refId)) {
+            throw new Error(`edge references unknown node: ${refId}`);
+          }
+        }
+      }
+      fieldUpdates.push({ nodeId: id, field, value });
+    } else if (rawMatch) {
+      // /raw/{id} - full node replacement not allowed in structuring
+      throw new Error("structuring cannot replace entire nodes; use field-level patches");
+    } else if (summaryMatch) {
+      // /summary/{id} - summary update
+      const [, id] = summaryMatch;
+      if (!allowedNodeIds.has(id) && !allKnownIds.has(id)) {
+        throw new Error(`cannot update summary for unknown node: ${id}`);
+      }
+      if (typeof value !== "string") {
+        throw new Error("summary value must be string");
+      }
+      summaryPatches.push({ op: op as Patch["op"], path, value });
+    } else {
+      throw new Error(`invalid path format: ${path}`);
+    }
+  }
+  return { fieldUpdates, summaryPatches };
+}
+
+/**
+ * Merge field updates into full node patches that the engine can apply.
+ */
+function mergeFieldUpdatesIntoPatches(
+  fieldUpdates: FieldUpdate[],
+  state: EchoState
+): Patch[] {
+  // Group updates by nodeId
+  const updatesByNode = new Map<string, FieldUpdate[]>();
+  for (const update of fieldUpdates) {
+    const existing = updatesByNode.get(update.nodeId) ?? [];
+    existing.push(update);
+    updatesByNode.set(update.nodeId, existing);
+  }
+
+  const patches: Patch[] = [];
+  for (const [nodeId, updates] of updatesByNode) {
+    const existingNode = state.raw[nodeId];
+    if (!existingNode) {
+      // Node doesn't exist, skip (shouldn't happen if validation is correct)
+      continue;
+    }
+
+    // Clone and apply field updates
+    const updatedNode = { ...existingNode };
+    for (const { field, value } of updates) {
+      (updatedNode as Record<string, unknown>)[field] = value;
+    }
+
+    patches.push({
+      op: "replace",
+      path: `/raw/${nodeId}`,
+      value: updatedNode,
+    });
+  }
+
+  return patches;
+}
+
+/**
+ * Check if an API key is available (without throwing).
+ */
+export function hasApiKey(opts: OpenAICompatibleOptions): boolean {
+  const key =
+    opts.apiKey ??
+    (globalThis as any)?.process?.env?.OPENAI_API_KEY ??
+    (globalThis as any)?.process?.env?.VITE_OPENAI_API_KEY ??
+    (typeof import.meta !== "undefined"
+      ? (import.meta as any)?.env?.VITE_OPENAI_API_KEY
+      : undefined);
+  return Boolean(key && key.trim().length > 0);
+}
+
+/**
+ * Structure unstructured nodes by calling an LLM to classify types and propose edges.
+ *
+ * @param state Current EchoState
+ * @param unstructuredIds IDs of nodes that need structuring
+ * @param goal Current user goal (for context)
+ * @param opts OpenAI-compatible options
+ * @returns Patches to apply for structuring
+ */
+export async function structureNodesWithContext(
+  state: EchoState,
+  unstructuredIds: string[],
+  goal: string,
+  opts: OpenAICompatibleOptions = {}
+): Promise<StructureNodesResult> {
+  if (unstructuredIds.length === 0) {
+    return { patches: [], attempts: 0 };
+  }
+
+  // Build context showing existing nodes
+  const context = buildContext(state);
+
+  // Build list of unstructured nodes for the LLM
+  const unstructuredNodes = unstructuredIds
+    .map((id) => {
+      const node = state.raw[id];
+      if (!node) return null;
+      return `- ${id}: "${node.summary ?? JSON.stringify(node.details)}"`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  const userMessage = [
+    `Goal: ${goal}`,
+    "",
+    "Existing memory context:",
+    context,
+    "",
+    "New unstructured nodes to classify and connect:",
+    unstructuredNodes,
+    "",
+    "Emit patches to structure these nodes. Output JSON array only.",
+  ].join("\n");
+
+  const baseMessages = [
+    { role: "system", content: STRUCTURE_SYSTEM_PROMPT },
+    { role: "user", content: userMessage },
+  ];
+
+  const allowedNodeIds = new Set(unstructuredIds);
+  const allKnownIds = new Set<string>([
+    ...Object.keys(state.raw ?? {}),
+    ...Object.keys(state.summary ?? {}),
+  ]);
+
+  let lastError = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const messages =
+      attempt === 0
+        ? baseMessages
+        : [
+            ...baseMessages,
+            {
+              role: "user",
+              content: `Previous output invalid: ${lastError}. Return ONLY a JSON array of patches following the rules.`,
+            },
+          ];
+    const content = await fetchChat(messages, opts);
+    try {
+      const { fieldUpdates, summaryPatches } = validateStructuringPatches(
+        content,
+        allowedNodeIds,
+        allKnownIds
+      );
+      // Merge field updates into full node patches
+      const nodePatchesFromFields = mergeFieldUpdatesIntoPatches(fieldUpdates, state);
+      const allPatches = [...nodePatchesFromFields, ...summaryPatches];
+      return { patches: allPatches, attempts: attempt + 1, raw: content };
+    } catch (err) {
+      lastError = String(err);
+      if (attempt === 1) {
+        throw new Error(`structureNodesWithContext validation failed: ${lastError}`);
+      }
+    }
+  }
+  throw new Error("structureNodesWithContext unreachable");
 }

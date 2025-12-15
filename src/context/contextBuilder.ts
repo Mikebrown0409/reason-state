@@ -35,10 +35,24 @@ function formatNode(node: StateNode): string {
   const isRetracted =
     (node.type === "assumption" && (node as any).assumptionStatus === "retracted") ||
     node.status === "blocked";
-  // Important: we keep retracted/blocked nodes in state (audit/replay),
+  const isArchived = node.status === "archived";
+  // Important: we keep retracted/blocked/archived nodes in state (audit/replay),
   // but we should not leak stale summaries into the LLM context.
-  const summary = isRetracted ? "(retracted)" : (node.summary ?? "");
+  const summary = isRetracted ? "(retracted)" : isArchived ? "(archived)" : (node.summary ?? "");
   return `- ${node.type}:${status} ${node.id}: ${summary}${lineage}`.trim();
+}
+
+/**
+ * Filter out archived and retracted nodes from active context.
+ * These nodes remain in state for audit/replay but should not be included
+ * in context sent to the LLM.
+ */
+function isActiveNode(node: StateNode): boolean {
+  // Exclude archived nodes
+  if (node.status === "archived") return false;
+  // Exclude retracted assumptions
+  if (node.type === "assumption" && (node as any).assumptionStatus === "retracted") return false;
+  return true;
 }
 
 function pick<T>(arr: T[], k?: number): T[] {
@@ -77,29 +91,112 @@ function typeWeight(n: StateNode): number {
   return 0;
 }
 
-function collectDepsForGoal(state: EchoState, goalId?: string): Set<string> {
+/**
+ * Collect nodes related to a goal via bidirectional traversal.
+ * - Upstream: what the goal depends on (dependsOn, temporalAfter, parent)
+ * - Downstream: what depends on the goal
+ * - Depth-limited to prevent explosion in large graphs
+ */
+function collectDepsForGoal(state: EchoState, goalId?: string, maxDepth = 3): Set<string> {
   if (!goalId) return new Set<string>();
+  const goalNode = state.raw?.[goalId];
+  if (!goalNode) return new Set<string>();
+
   const seen = new Set<string>();
-  const queue = [goalId];
+  const depthMap = new Map<string, number>();
+
+  // BFS with depth tracking
+  const queue: Array<{ id: string; depth: number }> = [{ id: goalId, depth: 0 }];
+
   while (queue.length) {
-    const id = queue.shift()!;
+    const { id, depth } = queue.shift()!;
     if (seen.has(id)) continue;
+    if (depth > maxDepth) continue;
+
     seen.add(id);
+    depthMap.set(id, depth);
+
+    const node = state.raw?.[id];
+    if (!node) continue;
+
+    // Upstream: what this node depends on
+    const upstream = [
+      ...(node.dependsOn ?? []),
+      ...((node as any).temporalAfter ?? []),
+      ...(node.parentId ? [node.parentId] : []),
+    ];
+    for (const upId of upstream) {
+      if (!seen.has(upId) && state.raw?.[upId]) {
+        queue.push({ id: upId, depth: depth + 1 });
+      }
+    }
+
+    // Downstream: what depends on this node
     Object.values(state.raw ?? {}).forEach((n) => {
-      if (!n) return;
+      if (!n || seen.has(n.id)) return;
       const deps = [
         ...(n.dependsOn ?? []),
         ...((n as any).temporalAfter ?? []),
         ...((n as any).temporalBefore ?? []),
+        ...(n.parentId === id ? [id] : []), // children
       ];
-      if (deps.includes(id)) queue.push(n.id);
+      if (deps.includes(id)) {
+        queue.push({ id: n.id, depth: depth + 1 });
+      }
     });
+
+    // Also include direct children
+    const children = node.children ?? [];
+    for (const childId of children) {
+      if (!seen.has(childId) && state.raw?.[childId]) {
+        queue.push({ id: childId, depth: depth + 1 });
+      }
+    }
   }
+
   return seen;
 }
 
+/**
+ * Score a node's relevance to the current goal.
+ * Higher scores = more relevant to include in context.
+ */
+function goalRelevanceScore(
+  n: StateNode,
+  state: EchoState,
+  goalId: string | undefined,
+  depChain: Set<string>
+): number {
+  if (!goalId) return 0;
+
+  const goalNode = state.raw?.[goalId];
+
+  // Highest: in the dependency chain
+  if (depChain.has(n.id)) return 100;
+
+  // High: same parent as goal (sibling nodes)
+  if (goalNode?.parentId && n.parentId === goalNode.parentId) return 80;
+
+  // Medium-high: shares edges with goal chain nodes
+  const nodeDeps = [
+    ...(n.dependsOn ?? []),
+    ...((n as any).temporalAfter ?? []),
+    ...((n as any).temporalBefore ?? []),
+  ];
+  const sharedEdges = nodeDeps.filter((id) => depChain.has(id)).length;
+  if (sharedEdges > 0) return 50 + Math.min(sharedEdges * 10, 30);
+
+  // Medium: contradicts something in the goal chain (relevant for conflict resolution)
+  const contradicts = n.contradicts ?? [];
+  if (contradicts.some((id) => depChain.has(id))) return 40;
+
+  // Low: no direct relationship
+  return 0;
+}
+
 function selectDeterministic(state: EchoState, buckets: BucketSelector[]): StateNode[] {
-  const nodes = Object.values(state.raw ?? {});
+  // Filter out archived and retracted nodes from active context
+  const nodes = Object.values(state.raw ?? {}).filter(isActiveNode);
   const priority = (n: StateNode): number => {
     if (n.dirty) return 0;
     if (n.type === "assumption") return 1;
@@ -249,7 +346,8 @@ function buildBalancedSections(
   ranker?: (node: StateNode) => number,
   vectorHits?: Set<string>
 ): { body: string; used: number } {
-  const nodes = Object.values(state.raw ?? {});
+  // Filter out archived and retracted nodes from active context
+  const nodes = Object.values(state.raw ?? {}).filter(isActiveNode);
   const sorted = sortByRecencyThenId(nodes);
   const depChain = collectDepsForGoal(state, goalId);
   const blockers = sorted.filter(
@@ -272,11 +370,15 @@ function buildBalancedSections(
     (n) => n.type !== "assumption" && n.type !== "fact" && n.type !== "action"
   );
 
+  // Score remaining nodes by goal relevance + type + recency
   const remainingScore = nodes
     .filter((n) => !blockers.includes(n) && !goalChain.includes(n))
     .map((n) => {
       const base = typeWeight(n);
-      const score = (ranker ? ranker(n) : 0) + base + recency(n) / 1e6;
+      const goalScore = goalRelevanceScore(n, state, goalId, depChain);
+      const customRank = ranker ? ranker(n) : 0;
+      // Goal relevance is weighted heavily to prioritize workflow-relevant nodes
+      const score = goalScore * 2 + customRank + base + recency(n) / 1e12;
       return { node: n, score };
     })
     .sort((a, b) => b.score - a.score || a.node.id.localeCompare(b.node.id))
@@ -285,22 +387,25 @@ function buildBalancedSections(
   const vectorMatches =
     vectorHits && vectorHits.size > 0 ? sorted.filter((n) => vectorHits.has(n.id)) : [];
 
+  // Tighter caps to enforce ~20-30 nodes in context for large graphs
+  // Deduplication in formatBalancedSections further reduces actual count
+  // minCaps ensure critical items appear even in tight budgets
   const sectionConfigs: SectionConfig[] = [
     vectorMatches.length
-      ? { title: "Vector matches", items: vectorMatches, minCap: 5, maxCap: 50 }
+      ? { title: "Vector matches", items: vectorMatches, minCap: 3, maxCap: 10 }
       : { title: "", items: [] },
-    { title: "Blockers", items: blockers, minCap: 5, maxCap: 50 },
-    { title: "Goals/constraints", items: goalChain, minCap: 5, maxCap: 40 },
-    { title: "Recent changes", items: recent, minCap: 5, maxCap: 20 },
-    { title: "High-confidence", items: highConfidence, minCap: 3, maxCap: 15 },
-    { title: "Assumptions", items: assumptions, minCap: 5, maxCap: 50 },
-    { title: "Facts", items: facts, minCap: 5, maxCap: 50 },
-    { title: "Actions/other", items: actions.concat(others), minCap: 5, maxCap: 30 },
+    { title: "Blockers", items: blockers, minCap: 3, maxCap: 10 },
+    { title: "Goals/constraints", items: goalChain, minCap: 3, maxCap: 15 },
+    { title: "Recent changes", items: recent, minCap: 5, maxCap: 12 },
+    { title: "High-confidence", items: highConfidence, minCap: 2, maxCap: 5 },
+    { title: "Assumptions", items: assumptions, minCap: 3, maxCap: 10 },
+    { title: "Facts", items: facts, minCap: 3, maxCap: 15 },
+    { title: "Actions/other", items: actions.concat(others), minCap: 2, maxCap: 10 },
     {
       title: "Additional",
       items: remainingScore,
-      minCap: mode === "aggressive" ? 10 : 5,
-      maxCap: mode === "aggressive" ? 80 : 40,
+      minCap: mode === "aggressive" ? 5 : 2,
+      maxCap: mode === "aggressive" ? 15 : 8,
     },
   ];
 
@@ -346,7 +451,8 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
   if (mode === "deterministic") {
     const lines: string[] = [];
     let used = 0;
-    const nodes = Object.values(state.raw ?? {});
+    // Filter out archived and retracted nodes from active context
+    const nodes = Object.values(state.raw ?? {}).filter(isActiveNode);
     const priority = (n: StateNode): number => {
       if (n.dirty) return 0;
       if (n.type === "assumption") return 1;

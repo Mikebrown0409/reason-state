@@ -212,4 +212,236 @@ describe("buildContext", () => {
       expect(ctx.length).toBeLessThanOrEqual(180);
     });
   });
+
+  describe("token efficiency (goal-relevance and caps)", () => {
+    function makeGraphWithDeps(): EchoState {
+      // Create a graph with goal → dep1 → dep2 and unrelated nodes
+      return {
+        raw: {
+          goal: {
+            id: "goal",
+            type: "planning",
+            summary: "Book Tokyo trip",
+            dependsOn: ["dep1"],
+          },
+          dep1: {
+            id: "dep1",
+            type: "fact",
+            summary: "User wants Tokyo",
+            dependsOn: ["dep2"],
+          },
+          dep2: {
+            id: "dep2",
+            type: "assumption",
+            summary: "Budget is 5000",
+          },
+          unrelated1: {
+            id: "unrelated1",
+            type: "fact",
+            summary: "Random fact 1",
+          },
+          unrelated2: {
+            id: "unrelated2",
+            type: "fact",
+            summary: "Random fact 2",
+          },
+        },
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+    }
+
+    it("collectDepsForGoal finds upstream dependencies (bidirectional)", () => {
+      const state = makeGraphWithDeps();
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 2000,
+        includeTimeline: false,
+        goalId: "goal",
+      });
+      // Should include goal and its upstream deps
+      expect(ctx).toContain("goal");
+      expect(ctx).toContain("dep1");
+      expect(ctx).toContain("dep2");
+    });
+
+    it("collectDepsForGoal finds downstream dependents", () => {
+      // Create a graph where something depends on the goal
+      const state: EchoState = {
+        raw: {
+          goal: { id: "goal", type: "planning", summary: "Main goal" },
+          dependent: {
+            id: "dependent",
+            type: "action",
+            summary: "Action depending on goal",
+            dependsOn: ["goal"],
+          },
+        },
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 2000,
+        includeTimeline: false,
+        goalId: "goal",
+      });
+      expect(ctx).toContain("goal");
+      expect(ctx).toContain("dependent");
+    });
+
+    it("collectDepsForGoal includes parent/child relationships", () => {
+      const state: EchoState = {
+        raw: {
+          parent: {
+            id: "parent",
+            type: "planning",
+            summary: "Parent goal",
+            children: ["goal"],
+          },
+          goal: {
+            id: "goal",
+            type: "planning",
+            summary: "Sub-goal",
+            parentId: "parent",
+          },
+          child: {
+            id: "child",
+            type: "action",
+            summary: "Child action",
+            parentId: "goal",
+          },
+        },
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 2000,
+        includeTimeline: false,
+        goalId: "goal",
+      });
+      expect(ctx).toContain("parent");
+      expect(ctx).toContain("goal");
+      expect(ctx).toContain("child");
+    });
+
+    it("100+ node graph produces reasonable context size (~20-30 nodes)", () => {
+      const raw: EchoState["raw"] = {
+        goal: { id: "goal", type: "planning", summary: "Main goal" },
+      };
+      // Create 100 facts
+      for (let i = 0; i < 100; i++) {
+        raw[`fact-${i}`] = { id: `fact-${i}`, type: "fact", summary: `Fact ${i}` };
+      }
+      // Create 20 assumptions
+      for (let i = 0; i < 20; i++) {
+        raw[`assump-${i}`] = {
+          id: `assump-${i}`,
+          type: "assumption",
+          summary: `Assumption ${i}`,
+        };
+      }
+      const state: EchoState = {
+        raw,
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 3000, // reasonable budget
+        includeTimeline: false,
+        goalId: "goal",
+      });
+
+      // Count node lines (lines starting with "- ")
+      const nodeLines = ctx.split("\n").filter((l) => l.startsWith("- "));
+      // With tighter caps, should be roughly 20-40 nodes max
+      expect(nodeLines.length).toBeLessThanOrEqual(50);
+      expect(nodeLines.length).toBeGreaterThan(5); // at least some content
+    });
+
+    it("goal-relevant nodes are prioritized over unrelated nodes", () => {
+      const state = makeGraphWithDeps();
+      // Add many unrelated nodes to push relevant ones down if scoring didn't work
+      for (let i = 0; i < 20; i++) {
+        state.raw[`noise-${i}`] = {
+          id: `noise-${i}`,
+          type: "fact",
+          summary: `Noise fact ${i}`,
+          updatedAt: "2025-01-01T00:00:00.000Z", // older than deps
+        };
+      }
+      // Make deps more recent
+      (state.raw.dep1 as any).updatedAt = "2025-01-02T00:00:00.000Z";
+      (state.raw.dep2 as any).updatedAt = "2025-01-02T00:00:00.000Z";
+
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 1000,
+        includeTimeline: false,
+        goalId: "goal",
+      });
+
+      // Deps should appear before noise due to goal relevance scoring
+      expect(ctx).toContain("dep1");
+      expect(ctx).toContain("dep2");
+    });
+
+    it("overflow indicators still work with tighter caps", () => {
+      const raw: EchoState["raw"] = {
+        goal: { id: "goal", type: "planning", summary: "Main goal" },
+      };
+      for (let i = 0; i < 50; i++) {
+        raw[`fact-${i}`] = { id: `fact-${i}`, type: "fact", summary: `Fact ${i}` };
+      }
+      const state: EchoState = {
+        raw,
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+
+      const ctx = buildContext(state, {
+        mode: "balanced",
+        maxChars: 500,
+        includeTimeline: false,
+      });
+
+      // Should have overflow indicator
+      expect(ctx).toMatch(/\.\.\. \(\d+ more/);
+    });
+
+    it("archived nodes are excluded from context", () => {
+      const state: EchoState = {
+        raw: {
+          active: { id: "active", type: "fact", summary: "Active fact" },
+          archived: {
+            id: "archived",
+            type: "fact",
+            summary: "Archived fact",
+            status: "archived",
+          },
+        },
+        summary: {},
+        history: [],
+        unknowns: [],
+        assumptions: [],
+      };
+
+      const ctx = buildContext(state, { mode: "balanced", maxChars: 2000 });
+      expect(ctx).toContain("Active fact");
+      expect(ctx).not.toContain("Archived fact");
+    });
+  });
 });
