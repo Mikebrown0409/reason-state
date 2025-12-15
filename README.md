@@ -6,7 +6,7 @@
 
 **Memory that actually works for AI agents.** Auto-healing, drift-aware, zero-config.
 
-> **78% fewer tokens** on multi-turn agents. Governed context that stays clean.
+**Up to 81% fewer tokens** on multi-turn agents. Governed context that stays clean.
 
 ```ts
 import ReasonState from "reason-state";
@@ -80,6 +80,7 @@ console.log(context);
 const memory = new ReasonState({
   apiKey: process.env.OPENAI_API_KEY,
   model: "gpt-4o-mini",
+  maxTokens: 1000,  // optional: context budget (~4k chars), default 1000
 });
 
 await memory.add("User wants Tokyo");
@@ -171,6 +172,24 @@ console.log(memory.state.history);
 
 ## API Reference
 
+### Constructor Options
+
+```ts
+const memory = new ReasonState({
+  apiKey: "...",      // optional: enables LLM structuring
+  model: "gpt-4o-mini", // optional: which model to use
+  maxTokens: 1000,    // optional: context budget (default 1000 ≈ 4k chars)
+  baseUrl: "...",     // optional: custom API endpoint
+});
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `apiKey` | - | OpenAI-compatible API key. Without it, runs in retrieve-only mode. |
+| `model` | `gpt-4o-mini` | Model for LLM structuring calls |
+| `maxTokens` | `1000` | Context budget in tokens (~4 chars/token). Controls how much memory is injected. |
+| `baseUrl` | OpenAI | Custom endpoint for self-hosted or alternative providers |
+
 ### `add(textOrObj)`
 Store a memory. No options required.
 
@@ -249,13 +268,21 @@ engine.applyPatches([{ op: "add", path: "/raw/node1", value: {...} }]);
 
 ## Benchmarks
 
-- **Token savings:** ~78% reduction on 20-turn agent conversations
+| Scenario | Nodes | Noise | Token Savings |
+|----------|-------|-------|---------------|
+| Small (clean) | 20 | 20% | 32% |
+| Medium (noisy) | 50 | 50% | 44% |
+| Large (noisy) | 100 | 60% | 72% |
+| Multi-turn sim | 150 | 65% | **81%** |
+
+Run the benchmark yourself:
+```bash
+npm test -- tests/tokenSavings.test.ts
+```
+
+More benchmarks:
 - **Context quality:** Retains required information under truncation (see `docs/benchmarks.md`)
 - **Retraction proof:** `docs/proof-pack.md` validates update/retraction correctness
-
-```bash
-npm run bench:proofpack
-```
 
 ---
 
