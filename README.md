@@ -1,6 +1,12 @@
 # reason-state
 
+[![npm version](https://img.shields.io/npm/v/reason-state.svg)](https://www.npmjs.com/package/reason-state)
+[![tests](https://img.shields.io/badge/tests-101%20passing-brightgreen.svg)]()
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Memory that actually works for AI agents.** Auto-healing, drift-aware, zero-config.
+
+> **78% fewer tokens** on multi-turn agents. Governed context that stays clean.
 
 ```ts
 import ReasonState from "reason-state";
@@ -30,7 +36,7 @@ Every AI agent needs memory. But memory gets messy:
 | **No audit trail** | "Why did the agent do that?" — good luck debugging |
 | **Token bloat** | 100 memories → 100k tokens → slow, expensive, truncated |
 
-**reason-state** solves all of this automatically.
+**reason-state** handles this automatically — but you can always take manual control when needed.
 
 ---
 
@@ -42,7 +48,7 @@ User: "Actually, Amsterdam"       → memory.add("...")  // Tokyo auto-archived
 User: "Wait, back to Tokyo"       → memory.add("...")  // Tokyo reactivated, Amsterdam archived
 ```
 
-The LLM structures your memories, detects conflicts, and keeps context clean. You never call `retract()`, `heal()`, or `rollback()` — it's all invisible.
+The LLM structures your memories, detects conflicts, and keeps context clean. Auto-heal is the default, not a black box — you can call `retract()`, `heal()`, or `rollback()` manually anytime.
 
 ---
 
@@ -88,6 +94,22 @@ const { messages, stats } = await memory.inject(
 
 // stats.structuringError, stats.autoHealAttempts, stats.autoHealRolledBack
 ```
+
+---
+
+## When to Use reason-state
+
+**Great fit:**
+- Multi-turn agents with evolving context
+- Production agents where you need debugging/audit
+- Cost-conscious teams (token budgeting matters)
+- Long-lived memory that changes over time
+- Self-hosted / OSS preference
+
+**Maybe not the best fit:**
+- Quick prototype where you don't care about memory quality
+- Single-turn completions (no memory needed)
+- Already locked into a managed memory service
 
 ---
 
@@ -140,9 +162,9 @@ console.log(memory.state.history);
 | Drop-in to `messages[]` | ✅ | ✅ | ✅ |
 | No config required | ✅ | ⚠️ | ✅ |
 | Token-budgeted context | ❌ | ✅ | ✅ |
-| Auto-heal contradictions | ❌ | ❌ | ✅ |
-| Drift control (archive/reactivate) | ❌ | ⚠️ | ✅ |
-| Deterministic replay/audit | ❌ | ❌ | ✅ |
+| Explicit auto-heal + rollback | ❌ | ❌ | ✅ |
+| Deterministic drift handling | ❌ | ⚠️ | ✅ |
+| Replay/audit trail | ❌ | ❌ | ✅ |
 | Works without API key | ❌ | ❌ | ✅ |
 
 ---
@@ -184,10 +206,23 @@ const { context, stats } = await memory.retrieve("What are user preferences?");
 
 ## Advanced Usage
 
-### Production Mode (Auto-heal + Rollback)
+### Manual Control (Escape Hatches)
+
+Auto-heal is the default, but you always have manual control:
+
 ```ts
 import { ReasonStateSimple } from "reason-state";
 
+const memory = new ReasonStateSimple({ mode: "debug" });
+
+// Manual governance when you need it
+await memory.retract("node-id");     // Retract a specific memory
+await memory.heal();                  // Resolve contradictions manually
+await memory.rollback("checkpoint");  // Rollback to a previous state
+```
+
+### Production Mode (Auto-heal + Rollback)
+```ts
 const memory = new ReasonStateSimple({
   apiKey: process.env.OPENAI_API_KEY,
   mode: "production",  // Auto-heals contradictions, rolls back on failure
@@ -208,6 +243,18 @@ import { ReasonStateAdvanced } from "reason-state";
 
 const engine = new ReasonStateAdvanced();
 engine.applyPatches([{ op: "add", path: "/raw/node1", value: {...} }]);
+```
+
+---
+
+## Benchmarks
+
+- **Token savings:** ~78% reduction on 20-turn agent conversations
+- **Context quality:** Retains required information under truncation (see `docs/benchmarks.md`)
+- **Retraction proof:** `docs/proof-pack.md` validates update/retraction correctness
+
+```bash
+npm run bench:proofpack
 ```
 
 ---
@@ -239,7 +286,7 @@ npx reason-state audit path/to/trace.json
 
 ### Run Tests
 ```bash
-npm test
+npm test  # 101 tests
 ```
 
 ---
