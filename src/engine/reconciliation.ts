@@ -1,5 +1,68 @@
 import type { EchoState, NodeType, StateNode, Patch } from "./types.js";
 
+/**
+ * Check if a node contains temporal anchors (dates, timestamps).
+ * Temporal nodes are identified by:
+ * - Containing date patterns in summary or details.text
+ * - Having temporalAfter or temporalBefore edges
+ * - Summary/details containing "Session date", "date:", or date-like patterns
+ */
+export function isTemporalNode(node: StateNode): boolean {
+  const text = (node.summary ?? "") + " " + (typeof node.details === "object" && node.details !== null
+    ? String((node.details as any).text ?? "")
+    : String(node.details ?? ""));
+  const lowerText = text.toLowerCase();
+  
+  // Check for date patterns
+  const datePatterns = [
+    /\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}\b/i,
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b/i,
+    /\b\d{4}-\d{2}-\d{2}\b/, // ISO date
+    /\bsession\s+date/i,
+    /\bdate:\s*\d/i,
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/, // MM/DD/YYYY
+  ];
+  
+  if (datePatterns.some(pattern => pattern.test(lowerText))) {
+    return true;
+  }
+  
+  // Nodes with temporal edges are likely temporal
+  if ((node.temporalAfter?.length ?? 0) > 0 || (node.temporalBefore?.length ?? 0) > 0) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if two temporal nodes refer to the same event instance.
+ * They refer to the same event if:
+ * - They share the same sourceId and sourceType (same session/event)
+ * - They have the same parentId (sibling nodes in same context)
+ * - They are explicitly linked via dependsOn (one depends on the other)
+ */
+export function isSameEvent(nodeA: StateNode, nodeB: StateNode): boolean {
+  // Same source = same event
+  if (nodeA.sourceId && nodeB.sourceId && nodeA.sourceId === nodeB.sourceId) {
+    if (nodeA.sourceType && nodeB.sourceType && nodeA.sourceType === nodeB.sourceType) {
+      return true;
+    }
+  }
+  
+  // Same parent = likely same event context
+  if (nodeA.parentId && nodeB.parentId && nodeA.parentId === nodeB.parentId) {
+    return true;
+  }
+  
+  // One depends on the other = related to same event
+  if ((nodeA.dependsOn ?? []).includes(nodeB.id) || (nodeB.dependsOn ?? []).includes(nodeA.id)) {
+    return true;
+  }
+  
+  return false;
+}
+
 export function propagateDirty(state: EchoState, nodeIds: string[]): EchoState {
   const queue = [...nodeIds];
   const seen = new Set<string>();
@@ -16,17 +79,35 @@ export function propagateDirty(state: EchoState, nodeIds: string[]): EchoState {
 }
 
 // Detect contradictions by scanning nodes that explicitly reference conflicts.
+// TEMPORAL SHIELD: Temporal nodes cannot contradict each other unless they refer to the same event.
 export function detectContradictions(state: EchoState): string[] {
   const contradictions: Set<string> = new Set();
   for (const node of Object.values(state.raw)) {
     const details = node.details as Record<string, unknown> | undefined;
     const conflictingId = details?.contradicts as string | undefined;
     if (conflictingId && state.raw[conflictingId]) {
+      const conflictingNode = state.raw[conflictingId];
+      // TEMPORAL SHIELD: If both are temporal and NOT the same event, ignore the contradiction
+      if (isTemporalNode(node) && conflictingNode && isTemporalNode(conflictingNode)) {
+        if (!isSameEvent(node, conflictingNode)) {
+          // Force-override: remove contradicts edge and create temporal edge instead
+          // This happens in resolveContradictionsByRecency, but we skip adding to contradictions set
+          continue;
+        }
+      }
       contradictions.add(node.id);
       contradictions.add(conflictingId);
     }
     (node.contradicts ?? []).forEach((cid) => {
       if (state.raw[cid]) {
+        const conflictingNode = state.raw[cid];
+        // TEMPORAL SHIELD: If both are temporal and NOT the same event, ignore the contradiction
+        if (isTemporalNode(node) && conflictingNode && isTemporalNode(conflictingNode)) {
+          if (!isSameEvent(node, conflictingNode)) {
+            // Force-override: skip this contradiction
+            return;
+          }
+        }
         contradictions.add(node.id);
         contradictions.add(cid);
       }
@@ -169,6 +250,58 @@ function resolveContradictionsByRecency(state: EchoState, ids: string[]): void {
     visited.add(id);
 
     const candidates = [id, ...neighbors].filter((n) => state.raw[n]);
+    
+    // TEMPORAL SHIELD: Check if all candidates are temporal nodes referring to different events
+    const allTemporal = candidates.every((cid) => {
+      const candidate = state.raw[cid];
+      return candidate && isTemporalNode(candidate);
+    });
+    
+    if (allTemporal && candidates.length > 1) {
+      // Check if any pair refers to the same event
+      let hasSameEvent = false;
+      for (let i = 0; i < candidates.length; i++) {
+        for (let j = i + 1; j < candidates.length; j++) {
+          const nodeA = state.raw[candidates[i]];
+          const nodeB = state.raw[candidates[j]];
+          if (nodeA && nodeB && isSameEvent(nodeA, nodeB)) {
+            hasSameEvent = true;
+            break;
+          }
+        }
+        if (hasSameEvent) break;
+      }
+      
+      // If all temporal nodes refer to different events, convert contradicts to temporal edges
+      if (!hasSameEvent) {
+        // Remove contradicts edges and create temporalAfter edges based on dates
+        for (let i = 0; i < candidates.length; i++) {
+          const nodeA = state.raw[candidates[i]];
+          if (!nodeA) continue;
+          
+          // Remove contradicts edges to other temporal nodes
+          const updatedContradicts = (nodeA.contradicts ?? []).filter((cid) => {
+            const otherNode = state.raw[cid];
+            if (!otherNode || !isTemporalNode(otherNode)) return true; // Keep non-temporal contradicts
+            return isSameEvent(nodeA, otherNode); // Keep only if same event
+          });
+          
+          if (updatedContradicts.length !== (nodeA.contradicts ?? []).length) {
+            nodeA.contradicts = updatedContradicts.length > 0 ? updatedContradicts : undefined;
+            nodeA.dirty = true;
+          }
+          
+          // Ensure temporal nodes are not blocked
+          if (nodeA.status === "blocked") {
+            nodeA.status = "open";
+            nodeA.dirty = true;
+          }
+        }
+        continue; // Skip recency resolution for temporal nodes
+      }
+    }
+    
+    // Normal contradiction resolution for non-temporal or same-event temporal nodes
     let winner = candidates[0];
     for (const cid of candidates.slice(1)) {
       if (isNewer(state.raw[cid], state.raw[winner])) winner = cid;
@@ -176,6 +309,18 @@ function resolveContradictionsByRecency(state: EchoState, ids: string[]): void {
     candidates.forEach((cid) => {
       const ref = state.raw[cid];
       if (!ref) return;
+      
+      // TEMPORAL SHIELD: Don't block temporal nodes unless they refer to the same event
+      if (isTemporalNode(ref)) {
+        const isSameEventAsWinner = cid === winner || (state.raw[winner] && isSameEvent(ref, state.raw[winner]));
+        if (!isSameEventAsWinner) {
+          // Different events - keep open, just remove contradicts edge
+          ref.status = ref.status ?? "open";
+          ref.dirty = false;
+          return;
+        }
+      }
+      
       if (cid === winner) {
         ref.status = ref.status ?? "open";
         ref.dirty = false;

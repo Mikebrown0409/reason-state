@@ -11,6 +11,7 @@ import {
   type OpenAICompatibleOptions,
 } from "../tools/openaiCompatiblePlanner.js";
 import type { EchoState } from "../engine/types.js";
+import { InMemoryVectorStore } from "../context/vectorStore.js";
 
 /**
  * Stats returned from inject() and retrieve().
@@ -71,9 +72,11 @@ export class ReasonStateAuto {
   private rs: ReasonStateSimple;
   private unstructuredIds: Set<string> = new Set();
   private opts: ReasonStateAutoOptions;
+  private vectorStore: InMemoryVectorStore;
 
   constructor(opts: ReasonStateAutoOptions = {}) {
     this.opts = opts;
+    this.vectorStore = new InMemoryVectorStore();
     this.rs = new ReasonStateSimple({
       mode: "production",
       apiKey: opts.apiKey,
@@ -81,6 +84,8 @@ export class ReasonStateAuto {
       baseUrl: opts.baseUrl,
       fetcher: opts.fetcher,
       maxTokens: opts.maxTokens,
+      vectorStore: this.vectorStore,
+      vectorTopK: 20,
     });
   }
 
@@ -97,15 +102,26 @@ export class ReasonStateAuto {
    */
   private async runStructuring(goal: string): Promise<boolean> {
     if (this.unstructuredIds.size === 0) {
+      if (process.env.DEBUG_CONTEXT) {
+        console.log(`[ReasonStateAuto] No unstructured nodes to structure (unstructuredIds.size = 0)`);
+      }
       return true; // Nothing to structure
     }
 
     if (!this.hasApiKey()) {
+      if (process.env.DEBUG_CONTEXT) {
+        console.log(`[ReasonStateAuto] No API key - skipping structuring`);
+      }
       // No API key - skip structuring (not an error)
       return true;
     }
 
     try {
+      const unstructuredCount = this.unstructuredIds.size;
+      if (process.env.DEBUG_CONTEXT) {
+        console.log(`[ReasonStateAuto] Running structuring for ${unstructuredCount} unstructured nodes`);
+      }
+      
       const result = await structureNodesWithContext(
         this.rs.state,
         Array.from(this.unstructuredIds),
@@ -113,15 +129,52 @@ export class ReasonStateAuto {
         this.opts as OpenAICompatibleOptions
       );
 
+      if (process.env.DEBUG_CONTEXT) {
+        console.log(`[ReasonStateAuto] Structuring returned ${result.patches.length} patches`);
+      }
+
       if (result.patches.length > 0) {
         this.rs.applyPatches(result.patches);
+        
+        // Verify edges were created
+        if (process.env.DEBUG_CONTEXT) {
+          const state = this.rs.state;
+          const nodes = Object.values(state.raw ?? {});
+          let edgeCount = 0;
+          nodes.forEach((n: any) => {
+            if (n.dependsOn?.length) edgeCount += n.dependsOn.length;
+            if (n.temporalAfter?.length) edgeCount += n.temporalAfter.length;
+            if (n.temporalBefore?.length) edgeCount += n.temporalBefore.length;
+            if (n.contradicts?.length) edgeCount += n.contradicts.length;
+          });
+          console.log(`[ReasonStateAuto] After applying patches: ${edgeCount} total edges in state`);
+        }
+        
+        // Sync ALL nodes to vector store after structuring (summaries may have changed, new edges created)
+        // Use raw text (details.text) for better matching, fallback to summary
+        const state = this.rs.state;
+        const allNodes = Object.values(state.raw ?? {});
+        
+        if (allNodes.length > 0) {
+          this.vectorStore.upsert(
+            allNodes.map((n) => {
+              const rawText = (n.details as any)?.text ?? n.summary ?? JSON.stringify(n.details ?? {});
+              return { id: n.id, text: rawText };
+            })
+          );
+        }
+      } else {
+        if (process.env.DEBUG_CONTEXT) {
+          console.log(`[ReasonStateAuto] ⚠️  Structuring returned 0 patches - no edges created`);
+        }
       }
 
       // Clear unstructured IDs on success
       this.unstructuredIds.clear();
       return true;
-    } catch {
+    } catch (error) {
       // Structuring failed - nodes remain unstructured
+      console.error("[ReasonStateAuto] Structuring error:", error);
       return false;
     }
   }
@@ -181,6 +234,13 @@ export class ReasonStateAuto {
       summary,
       type: "fact", // Default type; LLM structuring will refine this in step 3
     });
+
+    // Sync to vector store for keyword-based retrieval
+    // Use raw text (details.text) for better matching, fallback to summary
+    const rawText = typeof textOrObj === "string" 
+      ? textOrObj 
+      : (textOrObj as any).text ?? (textOrObj as any).details?.text ?? summary;
+    this.vectorStore.upsert([{ id, text: rawText }]);
 
     // Track as unstructured (for future LLM structuring in inject())
     this.unstructuredIds.add(id);

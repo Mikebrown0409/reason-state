@@ -3,41 +3,27 @@
     {
       "backend": "reason-state",
       "sampleId": "conv-26",
-      "coverage": 0.020100502512562814,
-      "avgTokens": 741
+      "coverage": 0,
+      "avgTokens": 1327.9
     },
     {
       "backend": "raw",
       "sampleId": "conv-26",
-      "coverage": 0.010050251256281407,
-      "avgTokens": 2919
+      "coverage": 0.4,
+      "avgTokens": 2422
     }
   ],
   "summary": [
     {
       "backend": "reason-state",
-      "accuracy": 0.020100502512562814,
-      "avgTokens": 741
+      "accuracy": 0,
+      "avgTokens": 1327.9
     },
     {
       "backend": "raw",
-      "accuracy": 0.010050251256281407,
-      "avgTokens": 2919
+      "accuracy": 0.4,
+      "avgTokens": 2422
     }
   ],
-  "llmResults": [
-    {
-      "backend": "reason-state",
-      "sampleId": "conv-26",
-      "f1": 0.09523809523809525,
-      "tokens": 907
-    },
-    {
-      "backend": "raw",
-      "sampleId": "conv-26",
-      "f1": 0.017543859649122806,
-      "tokens": 7221.333333333333
-    }
-  ],
-  "maxTokens": 800
+  "maxTokens": 4000
 }

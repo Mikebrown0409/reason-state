@@ -139,12 +139,50 @@ const STRUCTURE_SYSTEM_PROMPT = [
   "  5. Update summary: {\"op\":\"replace\",\"path\":\"/summary/{id}\",\"value\":\"concise summary\"}",
   "  6. Archive node: {\"op\":\"replace\",\"path\":\"/raw/{id}/status\",\"value\":\"archived\"}",
   "  7. Reactivate node: {\"op\":\"replace\",\"path\":\"/raw/{id}/status\",\"value\":\"open\"}",
+  "",
   "- Type classification guidelines:",
   "  - fact: verified information from tools or user statements",
   "  - assumption: inferred or uncertain information that may change",
   "  - unknown: missing information needed to proceed",
   "  - planning: goals, tasks, or action items",
+  "",
+  "CRITICAL - Create semantic connections (edges):",
+  "You MUST create edges to connect related nodes. This is essential for memory retrieval.",
+  "",
+  "- dependsOn edges: Create when nodes share:",
+  "  * Same person, place, topic, or entity",
+  "  * Related concepts (e.g., 'user's budget' dependsOn 'user's travel plans')",
+  "  * Question-answer relationships",
+  "  * Cause-effect relationships",
+  "  * Part-whole relationships",
+  "  Example: If node A mentions 'user's travel to Paris' and node B mentions 'user's hotel in Paris',",
+  "  create: {\"op\":\"replace\",\"path\":\"/raw/{B-id}/dependsOn\",\"value\":[\"{A-id}\"]}",
+  "",
+  "- temporalAfter edges: Create when nodes have chronological relationships:",
+  "  * Sequential events (earlier event → later event)",
+  "  * Session dates or timestamps (earlier session → later session)",
+  "  * Ordered steps in a process",
+  "  Example: If node A is 'Session date: 1 May 2023' and node B is 'Session date: 2 May 2023',",
+  "  create: {\"op\":\"replace\",\"path\":\"/raw/{B-id}/temporalAfter\",\"value\":[\"{A-id}\"]}",
+  "",
+  "- contradicts edges: Create when nodes contain conflicting information:",
+  "  * Direct contradictions (e.g., 'user wants X' vs 'user wants Y' for same context)",
+  "  * Mutually exclusive statements",
+  "  Example: If node A says 'user prefers option A' and node B says 'user prefers option B' for the same choice,",
+  "  create: {\"op\":\"replace\",\"path\":\"/raw/{A-id}/contradicts\",\"value\":[\"{B-id}\"]}",
+  "  and: {\"op\":\"replace\",\"path\":\"/raw/{B-id}/contradicts\",\"value\":[\"{A-id}\"]}",
+  "",
+  "  CRITICAL - Temporal nodes (dates/timestamps) are NOT contradictions:",
+  "  * Two nodes with different dates (e.g., '7 May 2023' vs '8 May 2023') are NOT contradictions",
+  "  * They are distinct points on a timeline - use temporalAfter/temporalBefore edges instead",
+  "  * Only create contradicts edges for temporal nodes if they refer to the EXACT SAME event/instance",
+  "  * Example: 'Session date: 7 May 2023' and 'Session date: 8 May 2023' should use temporalAfter, NOT contradicts",
+  "",
+  "- Create edges liberally: It's better to have more connections than fewer.",
+  "  When in doubt, create a dependsOn edge if nodes are related in any way.",
+  "",
   "- Detect contradictions: if a new node contradicts an existing node, add both to each other's contradicts array.",
+  "",
   "- Archival and reactivation (IMPORTANT):",
   "  - If a new node supersedes or contradicts an existing active node, ARCHIVE the old node.",
   "  - Example: 'User wants Tokyo' superseded by 'User wants Amsterdam' → archive the Tokyo node.",
@@ -153,11 +191,12 @@ const STRUCTURE_SYSTEM_PROMPT = [
   "    REACTIVATE the archived node and ARCHIVE the currently active conflicting node.",
   "  - To reactivate: {\"op\":\"replace\",\"path\":\"/raw/{archived-id}/status\",\"value\":\"open\"}",
   "  - Archived nodes are NOT deleted; they remain for audit and can be reactivated.",
+  "",
   "- Use existing node ids; do NOT invent new ids.",
   "- Output a JSON array of patches. If unsure or no changes needed, return [].",
   "",
-  "Example output:",
-  '[{"op":"replace","path":"/raw/auto-abc123/type","value":"assumption"},{"op":"replace","path":"/raw/auto-abc123/status","value":"archived"}]',
+  "Example output (note: includes edges):",
+  '[{"op":"replace","path":"/raw/auto-abc123/type","value":"fact"},{"op":"replace","path":"/raw/auto-abc123/dependsOn","value":["auto-xyz789"]},{"op":"replace","path":"/raw/auto-def456/temporalAfter","value":["auto-abc123"]},{"op":"replace","path":"/raw/auto-ghi789/status","value":"archived"}]',
 ].join("\n");
 
 /**
@@ -368,6 +407,22 @@ export async function structureNodesWithContext(
     ...Object.keys(state.summary ?? {}),
   ]);
 
+  // Calculate appropriate max_tokens for structuring
+  // With edges, each node can generate multiple patches:
+  //   - Type patch: ~30 tokens
+  //   - dependsOn edges: ~40 tokens per edge (can have multiple)
+  //   - temporalAfter edges: ~40 tokens per edge
+  //   - Summary patches: ~30 tokens
+  // So each node might need 100-200 tokens if it has multiple edges
+  // We estimate 3 patches per node on average (type + 2 edges) = ~120 tokens per node
+  const estimatedTokensNeeded = Math.max(256, unstructuredIds.length * 120);
+  const maxTokensForStructuring = Math.min(estimatedTokensNeeded, 8192); // Cap at 8k tokens (increased from 4k)
+  
+  const structuringOpts = {
+    ...opts,
+    maxTokens: opts.maxTokens ?? maxTokensForStructuring,
+  };
+
   let lastError = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     const messages =
@@ -380,7 +435,20 @@ export async function structureNodesWithContext(
               content: `Previous output invalid: ${lastError}. Return ONLY a JSON array of patches following the rules.`,
             },
           ];
-    const content = await fetchChat(messages, opts);
+    const content = await fetchChat(messages, structuringOpts);
+    
+    // Log raw LLM response for debugging
+    if (attempt === 0) {
+      console.log(`\n[STRUCTURING DEBUG] Processing ${unstructuredIds.length} nodes with max_tokens=${structuringOpts.maxTokens}`);
+      console.log(`[STRUCTURING DEBUG] Raw LLM response length: ${content.length} chars`);
+      if (content.length < 1000) {
+        console.log(`[STRUCTURING DEBUG] Full response:\n${content}`);
+      } else {
+        console.log(`[STRUCTURING DEBUG] First 500 chars: ${content.substring(0, 500)}`);
+        console.log(`[STRUCTURING DEBUG] Last 500 chars: ${content.substring(Math.max(0, content.length - 500))}`);
+      }
+    }
+    
     try {
       const { fieldUpdates, summaryPatches } = validateStructuringPatches(
         content,
@@ -390,10 +458,38 @@ export async function structureNodesWithContext(
       // Merge field updates into full node patches
       const nodePatchesFromFields = mergeFieldUpdatesIntoPatches(fieldUpdates, state);
       const allPatches = [...nodePatchesFromFields, ...summaryPatches];
+      
+      // Debug: Count edge patches
+      const edgePatches = fieldUpdates.filter((f) => 
+        ["dependsOn", "temporalAfter", "temporalBefore", "contradicts"].includes(f.field)
+      );
+      if (attempt === 0) {
+        console.log(`[STRUCTURING DEBUG] Generated ${fieldUpdates.length} field updates, ${edgePatches.length} edge updates`);
+        if (edgePatches.length > 0) {
+          console.log(`[STRUCTURING DEBUG] Edge patches (first 5):`);
+          edgePatches.slice(0, 5).forEach((ep) => {
+            console.log(`  ${ep.nodeId}.${ep.field} = ${JSON.stringify(ep.value)}`);
+          });
+        }
+      }
+      
       return { patches: allPatches, attempts: attempt + 1, raw: content };
     } catch (err) {
       lastError = String(err);
+      console.error(`[STRUCTURING DEBUG] Validation error on attempt ${attempt + 1}:`, lastError);
       if (attempt === 1) {
+        // Log the problematic content around the error position
+        if (lastError.includes("position")) {
+          const match = lastError.match(/position (\d+)/);
+          if (match) {
+            const pos = parseInt(match[1]);
+            const start = Math.max(0, pos - 100);
+            const end = Math.min(content.length, pos + 100);
+            console.error(`\n[STRUCTURING DEBUG] Content around error position ${pos}:`);
+            console.error(content.substring(start, end));
+            console.error(`\nCharacter at position ${pos}: "${content[pos]}"`);
+          }
+        }
         throw new Error(`structureNodesWithContext validation failed: ${lastError}`);
       }
     }

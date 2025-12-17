@@ -1,4 +1,5 @@
 import type { EchoState, StateNode } from "../engine/types.js";
+import { isTemporalNode } from "../engine/reconciliation.js";
 
 type BucketSelector = {
   label: string;
@@ -28,7 +29,7 @@ type ContextOptions = {
 const DEFAULT_MAX_CHARS = 2500;
 const DEFAULT_TIMELINE_TAIL = 5;
 
-function formatNode(node: StateNode): string {
+function formatNode(node: StateNode, includeRawText = false): string {
   const lineage =
     node.sourceType && node.sourceId ? ` (source: ${node.sourceType}/${node.sourceId})` : "";
   const status = node.status ? ` [${node.status}]` : "";
@@ -38,8 +39,77 @@ function formatNode(node: StateNode): string {
   const isArchived = node.status === "archived";
   // Important: we keep retracted/blocked/archived nodes in state (audit/replay),
   // but we should not leak stale summaries into the LLM context.
-  const summary = isRetracted ? "(retracted)" : isArchived ? "(archived)" : (node.summary ?? "");
+  let summary = isRetracted ? "(retracted)" : isArchived ? "(archived)" : (node.summary ?? "");
+  
+  // For vector matches, include raw text if summary doesn't contain it (ensures keywords are visible)
+  if (includeRawText && !isRetracted && !isArchived) {
+    const rawText = (node.details as any)?.text;
+    if (rawText && rawText !== summary && rawText.length > summary.length) {
+      // Append raw text if it's different and longer (contains more info)
+      summary = `${summary} | Full text: ${rawText}`;
+    }
+  }
+  
   return `- ${node.type}:${status} ${node.id}: ${summary}${lineage}`.trim();
+}
+
+/**
+ * Format a temporal node for the Temporal Ledger.
+ * Uses raw text (details.text) for perfect recall of dates, even if node is blocked.
+ */
+function formatTemporalNode(node: StateNode): string {
+  const status = node.status === "blocked" ? " [Blocked/Disputed]" : node.status ? ` [${node.status}]` : " [Confirmed]";
+  // For temporal nodes, ALWAYS use raw text to ensure dates are visible
+  const rawText = (node.details as any)?.text;
+  const displayText = rawText ?? node.summary ?? JSON.stringify(node.details ?? {});
+  return `* [${node.id}] ${displayText}${status}`;
+}
+
+/**
+ * Build the Temporal Ledger section.
+ * Extracts ALL temporal nodes (even blocked/disputed ones) and lists them chronologically.
+ * This provides "Perfect Recall" for temporal queries while maintaining governance.
+ */
+function buildTemporalLedger(state: EchoState, maxChars: number): { ledger: string; used: number } {
+  // Get all temporal nodes (including blocked ones for perfect recall)
+  const temporalNodes = Object.values(state.raw ?? {})
+    .filter((n) => isTemporalNode(n))
+    .sort((a, b) => {
+      // Sort by recency (most recent first) for ledger
+      const recA = recency(a);
+      const recB = recency(b);
+      if (recB !== recA) return recB - recA;
+      return a.id.localeCompare(b.id);
+    });
+
+  if (temporalNodes.length === 0) {
+    return { ledger: "", used: 0 };
+  }
+
+  const header = "## METADATA / TEMPORAL LEDGER:";
+  let used = header.length + 1;
+  const lines: string[] = [header];
+
+  for (const node of temporalNodes) {
+    const line = formatTemporalNode(node);
+    const lineLen = line.length + 1;
+    if (used + lineLen > maxChars) {
+      // Add overflow indicator
+      const remaining = temporalNodes.length - lines.length + 1;
+      if (remaining > 0) {
+        const overflow = `* ... (${remaining} more temporal entries)`;
+        const overflowLen = overflow.length + 1;
+        if (used + overflowLen <= maxChars) {
+          lines.push(overflow);
+        }
+      }
+      break;
+    }
+    lines.push(line);
+    used += lineLen;
+  }
+
+  return { ledger: lines.join("\n"), used };
 }
 
 /**
@@ -155,6 +225,75 @@ function collectDepsForGoal(state: EchoState, goalId?: string, maxDepth = 3): Se
   }
 
   return seen;
+}
+
+/**
+ * Expand vector match nodes via edges to find related nodes.
+ * Uses 1-hop expansion (depth=1) to prevent context bloat.
+ * Returns set of node IDs including original vector matches + their related nodes.
+ */
+function expandVectorMatches(
+  state: EchoState,
+  vectorMatchIds: Set<string>,
+  maxDepth = 1
+): Set<string> {
+  if (vectorMatchIds.size === 0) return new Set<string>();
+
+  const expanded = new Set<string>(vectorMatchIds); // Include original matches
+  const queue: Array<{ id: string; depth: number }> = Array.from(vectorMatchIds).map(
+    (id) => ({ id, depth: 0 })
+  );
+  const seen = new Set<string>(vectorMatchIds);
+
+  while (queue.length) {
+    const { id, depth } = queue.shift()!;
+    if (depth >= maxDepth) continue;
+
+    const node = state.raw?.[id];
+    if (!node) continue;
+
+    // Upstream: what this node depends on
+    const upstream = [
+      ...(node.dependsOn ?? []),
+      ...((node as any).temporalAfter ?? []),
+      ...(node.parentId ? [node.parentId] : []),
+    ];
+    for (const upId of upstream) {
+      if (!seen.has(upId) && state.raw?.[upId]) {
+        seen.add(upId);
+        expanded.add(upId);
+        queue.push({ id: upId, depth: depth + 1 });
+      }
+    }
+
+    // Downstream: what depends on this node
+    Object.values(state.raw ?? {}).forEach((n) => {
+      if (!n || seen.has(n.id)) return;
+      const deps = [
+        ...(n.dependsOn ?? []),
+        ...((n as any).temporalAfter ?? []),
+        ...((n as any).temporalBefore ?? []),
+        ...(n.parentId === id ? [id] : []), // children
+      ];
+      if (deps.includes(id)) {
+        seen.add(n.id);
+        expanded.add(n.id);
+        queue.push({ id: n.id, depth: depth + 1 });
+      }
+    });
+
+    // Also include direct children
+    const children = node.children ?? [];
+    for (const childId of children) {
+      if (!seen.has(childId) && state.raw?.[childId]) {
+        seen.add(childId);
+        expanded.add(childId);
+        queue.push({ id: childId, depth: depth + 1 });
+      }
+    }
+  }
+
+  return expanded;
 }
 
 /**
@@ -310,8 +449,10 @@ function formatBalancedSections(
 
     let added = 0;
     if (cap > 0) {
+      // For Vector matches section, include raw text to ensure keywords are visible
+      const isVectorSection = section.title === "Vector matches";
       for (const n of unique.slice(0, cap)) {
-        const line = formatNode(n);
+        const line = formatNode(n, isVectorSection);
         const len = line.length + 1;
         if (used + len > maxChars) break;
         lines.push(line);
@@ -344,7 +485,9 @@ function buildBalancedSections(
   maxChars: number,
   mode: ContextMode,
   ranker?: (node: StateNode) => number,
-  vectorHits?: Set<string>
+  vectorHits?: Set<string>,
+  vectorStore?: { query: (text: string, topK?: number) => Array<{ id: string; score?: number }> },
+  queryText?: string
 ): { body: string; used: number } {
   // Filter out archived and retracted nodes from active context
   const nodes = Object.values(state.raw ?? {}).filter(isActiveNode);
@@ -384,15 +527,98 @@ function buildBalancedSections(
     .sort((a, b) => b.score - a.score || a.node.id.localeCompare(b.node.id))
     .map((s) => s.node);
 
-  const vectorMatches =
-    vectorHits && vectorHits.size > 0 ? sorted.filter((n) => vectorHits.has(n.id)) : [];
+  // Expand vector matches via edges (1-hop to prevent bloat)
+  const expandedVectorIds = vectorHits && vectorHits.size > 0
+    ? expandVectorMatches(state, vectorHits, 1) // 1-hop expansion only
+    : new Set<string>();
+  
+  // Detailed logging for debugging
+  if (process.env.DEBUG_CONTEXT && vectorHits && vectorHits.size > 0) {
+    const expansionRatio = (expandedVectorIds.size / vectorHits.size).toFixed(1);
+    const originalMatches = Array.from(vectorHits).map(id => {
+      const node = state.raw?.[id];
+      return { 
+        id, 
+        summary: node?.summary?.substring(0, 80) ?? (node?.details as any)?.text?.substring(0, 80) ?? 'no summary',
+        dependsOn: node?.dependsOn?.length ?? 0,
+        temporalAfter: (node as any)?.temporalAfter?.length ?? 0,
+        children: node?.children?.length ?? 0
+      };
+    });
+    const expandedOnly = Array.from(expandedVectorIds).filter(id => !vectorHits.has(id));
+    const expandedNodes = expandedOnly.map(id => {
+      const node = state.raw?.[id];
+      return { 
+        id, 
+        summary: node?.summary?.substring(0, 80) ?? (node?.details as any)?.text?.substring(0, 80) ?? 'no summary',
+        expandedFrom: Array.from(vectorHits).find(vid => {
+          const vnode = state.raw?.[vid];
+          return vnode?.dependsOn?.includes(id) || 
+                 (vnode as any)?.temporalAfter?.includes(id) ||
+                 vnode?.children?.includes(id) ||
+                 vnode?.parentId === id;
+        })
+      };
+    });
+    
+    console.log(`\n[Context Debug] Vector expansion: ${vectorHits.size} → ${expandedVectorIds.size} nodes (${expansionRatio}x)`);
+    if (expandedNodes.length === 0 && expansionRatio === "1.0") {
+      console.log(`[Context Debug] ⚠️  No edge expansion - checking why...`);
+      const nodesWithEdges = originalMatches.filter(m => m.dependsOn > 0 || m.temporalAfter > 0 || m.children > 0);
+      console.log(`[Context Debug]   - Vector matches with edges: ${nodesWithEdges.length}/${originalMatches.length}`);
+      if (nodesWithEdges.length > 0) {
+        console.log(`[Context Debug]   - Example nodes with edges:`);
+        nodesWithEdges.slice(0, 3).forEach(m => {
+          console.log(`     ${m.id}: dependsOn=${m.dependsOn}, temporalAfter=${m.temporalAfter}, children=${m.children}`);
+        });
+      }
+    }
+    if (expandedNodes.length > 0) {
+      console.log(`[Context Debug] Expanded nodes via edges (${expandedNodes.length}):`);
+      expandedNodes.forEach(m => {
+        console.log(`  - ${m.id} (from ${m.expandedFrom ?? 'unknown'}): ${m.summary}`);
+      });
+    }
+  }
+  
+  // Create vectorMatches preserving vector search score order (not recency order)
+  // This ensures high-scoring matches like camping node (rank #9) aren't lost
+  let vectorMatches: StateNode[] = [];
+  if (expandedVectorIds.size > 0) {
+    if (vectorStore && queryText) {
+      // Re-query to get scores and preserve ranking
+      try {
+        const hits = vectorStore.query(queryText, 20);
+        const nodeMap = new Map(Object.values(state.raw ?? {}).map(n => [n.id, n]));
+        const matchesWithScores: Array<{ node: StateNode; score: number }> = [];
+        
+        for (const hit of hits) {
+          const node = nodeMap.get(hit.id);
+          if (node && expandedVectorIds.has(hit.id) && isActiveNode(node)) {
+            matchesWithScores.push({ node, score: hit.score ?? 0 });
+          }
+        }
+        
+        // Sort by score (descending) to preserve vector search ranking
+        vectorMatches = matchesWithScores
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.node);
+      } catch {
+        // Fallback to recency order if re-query fails
+        vectorMatches = sorted.filter((n) => expandedVectorIds.has(n.id));
+      }
+    } else {
+      // No vector store, use recency order
+      vectorMatches = sorted.filter((n) => expandedVectorIds.has(n.id));
+    }
+  }
 
   // Tighter caps to enforce ~20-30 nodes in context for large graphs
   // Deduplication in formatBalancedSections further reduces actual count
   // minCaps ensure critical items appear even in tight budgets
   const sectionConfigs: SectionConfig[] = [
     vectorMatches.length
-      ? { title: "Vector matches", items: vectorMatches, minCap: 3, maxCap: 10 }
+      ? { title: "Vector matches", items: vectorMatches, minCap: 3, maxCap: 20 } // Increased maxCap to accommodate expanded matches
       : { title: "", items: [] },
     { title: "Blockers", items: blockers, minCap: 3, maxCap: 10 },
     { title: "Goals/constraints", items: goalChain, minCap: 3, maxCap: 15 },
@@ -422,6 +648,10 @@ function appendTimeline(
 ): string {
   const lines: string[] = [body];
   let used = usedOverride ?? body.length;
+  // Ensure we don't exceed maxChars
+  if (used > maxChars) {
+    return body.slice(0, maxChars);
+  }
   if (includeTimeline && (state.history?.length ?? 0) > 0) {
     const section = "## Timeline";
     if (used + section.length + 1 <= maxChars) {
@@ -447,6 +677,12 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
   const includeTimeline = opts.includeTimeline ?? true;
   const timelineTail = opts.timelineTail ?? DEFAULT_TIMELINE_TAIL;
   const buckets = opts.buckets ?? defaultBuckets();
+
+  // Build Temporal Ledger first (extracts all temporal nodes, even blocked ones)
+  // Reserve ~30% of budget for ledger to ensure temporal recall
+  const ledgerBudget = Math.floor(maxChars * 0.3);
+  const { ledger: temporalLedger, used: ledgerUsed } = buildTemporalLedger(state, ledgerBudget);
+  const remainingChars = maxChars - ledgerUsed;
 
   if (mode === "deterministic") {
     const lines: string[] = [];
@@ -507,7 +743,9 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
       }
     }
     const body = lines.join("\n");
-    return appendTimeline(body, state, includeTimeline, timelineTail, maxChars);
+    // Prepend Temporal Ledger if present
+    const fullBody = temporalLedger ? `${temporalLedger}\n\n${body}` : body;
+    return appendTimeline(fullBody, state, includeTimeline, timelineTail, maxChars, ledgerUsed);
   }
 
   let vectorHitSet: Set<string> | undefined;
@@ -515,6 +753,34 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
     try {
       const hits = opts.vectorStore.query(opts.queryText, opts.vectorTopK ?? 20);
       vectorHitSet = new Set(hits.map((h) => h.id));
+      
+      // Debug logging for vector search
+      if (process.env.DEBUG_CONTEXT) {
+        console.log(`\n[Context Debug] Vector search for: "${opts.queryText}"`);
+        console.log(`[Context Debug] Found ${hits.length} matches (top ${opts.vectorTopK ?? 20}):`);
+        hits.slice(0, 20).forEach((h, i) => {
+          const node = state.raw?.[h.id];
+          const summary = node?.summary?.substring(0, 80) ?? (node?.details as any)?.text?.substring(0, 80) ?? 'no summary';
+          const hasCamping = summary.toLowerCase().includes('camping') || summary.toLowerCase().includes('next month');
+          console.log(`  ${i + 1}. ${h.id} (score: ${h.score?.toFixed(3) ?? 'N/A'})${hasCamping ? ' ⭐ CAMPING' : ''}: ${summary}`);
+        });
+        
+        // Check if camping-related nodes exist but weren't found
+        const allNodes = Object.values(state.raw ?? {});
+        const campingNodes = allNodes.filter((n: any) => 
+          n.summary?.toLowerCase().includes("camping") || 
+          (n.details as any)?.text?.toLowerCase().includes("camping") ||
+          n.summary?.toLowerCase().includes("next month")
+        );
+        const foundCampingIds = new Set(hits.map(h => h.id));
+        const missingCamping = campingNodes.filter((n: any) => !foundCampingIds.has(n.id));
+        if (missingCamping.length > 0) {
+          console.log(`\n[Context Debug] ⚠️  Found ${missingCamping.length} camping-related nodes NOT in vector results:`);
+          missingCamping.forEach((n: any) => {
+            console.log(`  - ${n.id}: ${n.summary?.substring(0, 80) ?? (n.details as any)?.text?.substring(0, 80)}`);
+          });
+        }
+      }
     } catch {
       vectorHitSet = undefined; // swallow errors to keep default path deterministic
     }
@@ -523,10 +789,15 @@ export function buildContext(state: EchoState, opts: ContextOptions = {}): strin
   const { body, used } = buildBalancedSections(
     state,
     opts.goalId,
-    maxChars,
+    remainingChars, // Use remaining chars after ledger
     mode,
     mode === "aggressive" ? opts.ranker : undefined,
-    vectorHitSet
+    vectorHitSet,
+    opts.vectorStore,
+    opts.queryText
   );
-  return appendTimeline(body, state, includeTimeline, timelineTail, maxChars, used);
+  // Prepend Temporal Ledger if present
+  const fullBody = temporalLedger ? `${temporalLedger}\n\n${body}` : body;
+  const totalUsed = ledgerUsed + used;
+  return appendTimeline(fullBody, state, includeTimeline, timelineTail, maxChars, totalUsed);
 }

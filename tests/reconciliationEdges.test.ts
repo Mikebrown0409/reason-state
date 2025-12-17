@@ -119,6 +119,55 @@ describe("reconciliation edges and gating", () => {
     expect(blockedOne).toBe(true);
   });
 
+  it("can block one of multiple conflicting session date facts", () => {
+    const state = createEmptyState();
+    const next = applyPatches(
+      [
+        {
+          op: "add",
+          path: "/raw/date1",
+          value: {
+            id: "date1",
+            type: "fact",
+            summary: "Session date: 1:56 pm on 8 May, 2023",
+            contradicts: ["date2"],
+          },
+        },
+        {
+          op: "add",
+          path: "/raw/date2",
+          value: {
+            id: "date2",
+            type: "fact",
+            summary: "Session date: 1:14 pm on 25 May, 2023",
+            contradicts: ["date3"],
+          },
+        },
+        {
+          op: "add",
+          path: "/raw/date3",
+          value: {
+            id: "date3",
+            type: "fact",
+            summary: "Session date: 7:55 pm on 9 June, 2023",
+            contradicts: ["date1"],
+          },
+        },
+      ],
+      state
+    );
+
+    const d1 = next.raw.date1;
+    const d2 = next.raw.date2;
+    const d3 = next.raw.date3;
+
+    // At least one of the session date facts should be blocked/dirty as a "loser" in the contradiction set.
+    const blockedDates = [d1, d2, d3].filter(
+      (n) => n && n.status === "blocked" && n.dirty
+    );
+    expect(blockedDates.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("tracks unknowns and blocks action via canExecute", () => {
     const engine = new ReasonState();
     engine.applyPatches([
@@ -178,6 +227,55 @@ describe("reconciliation edges and gating", () => {
     const next = applyPatches(
       [
         {
+          op: "add",
+          path: "/raw/parent",
+          value: { id: "parent", type: "planning", summary: "p", children: ["child"] },
+        },
+        {
+          op: "add",
+          path: "/raw/child",
+          value: { id: "child", type: "fact", summary: "c", parentId: "parent" },
+        },
+      ],
+      state
+    );
+    expect((next.raw.parent as any).children).toEqual(["child"]);
+    expect((next.raw.child as any).parentId).toBe("parent");
+  });
+
+  it("blocks on temporalAfter until predecessor resolves", () => {
+    const state = createEmptyState();
+    const withTemporal = applyPatches(
+      [
+        {
+          op: "add",
+          path: "/raw/step1",
+          value: { id: "step1", type: "planning", summary: "first" },
+        },
+        {
+          op: "add",
+          path: "/raw/step2",
+          value: { id: "step2", type: "action", summary: "after first", temporalAfter: ["step1"] },
+        },
+      ],
+      state
+    );
+    // Current behavior: temporalAfter is advisory; does not block until resolved
+    expect(withTemporal.raw.step2.status).toBe("open");
+    const resolved = applyPatches(
+      [
+        {
+          op: "replace",
+          path: "/raw/step1",
+          value: { id: "step1", type: "planning", summary: "first", status: "resolved" },
+        },
+      ],
+      withTemporal
+    );
+    expect(resolved.raw.step2.status).toBe("open");
+  });
+});
+
           op: "add",
           path: "/raw/parent",
           value: { id: "parent", type: "planning", summary: "p", children: ["child"] },
